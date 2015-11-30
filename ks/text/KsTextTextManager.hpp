@@ -108,7 +108,7 @@ namespace ks
                            std::vector<GlyphPosition>& list_glyph_pos);
 
             // uint: atlas index
-            Signal<uint> * const signal_new_atlas;
+            Signal<uint,uint> * const signal_new_atlas;
 
             // uint: atlas index,
             // glm::u16vec2: image offset,

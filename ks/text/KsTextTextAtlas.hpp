@@ -65,7 +65,12 @@ namespace ks
         public:
             ~TextAtlas();
 
-            Signal<uint> signal_new_atlas;
+            // atlas index,
+            // atlas size px,
+            Signal<
+                uint,
+                uint
+            > signal_new_atlas;
 
             // atlas index,
             // image offset,

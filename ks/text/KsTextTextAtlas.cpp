@@ -404,7 +404,9 @@ namespace ks
             BinPackShelf atlas_bin(m_atlas_size_px,m_atlas_size_px,1);
             m_list_atlas_bins.push_back(atlas_bin);
 
-            signal_new_atlas.Emit(m_list_atlas_bins.size()-1);
+            signal_new_atlas.Emit(
+                        m_list_atlas_bins.size()-1,
+                        m_atlas_size_px);
         }
 
         bool TextAtlas::glyphIsLessThanLB(Glyph const &glyph,

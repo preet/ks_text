@@ -341,7 +341,7 @@ namespace test
             }
         }
 
-        void onNewAtlas(ks::uint atlas_index)
+        void onNewAtlas(ks::uint atlas_index,ks::uint atlas_size_px)
         {
             if(atlas_index > 3) {
                 return;
@@ -351,7 +351,7 @@ namespace test
 
             auto& atlas_data = m_list_atlas_data[atlas_index];
 
-            Image<R8> blank_image(128,128,R8{0});
+            Image<R8> blank_image(atlas_size_px,atlas_size_px,R8{0});
 
             atlas_data.atlas_texture->UpdateTexture(
                         gl::Texture2D::Update{
