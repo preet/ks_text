@@ -22,172 +22,175 @@
 
 namespace ks
 {
-    // Glyph Metrics
-    // (horizontal layout)
-    // ============================================================= //
-    //
-    //               xMin         xMax
-    //            |    |           |
-    //            |    |<- width ->|
-    //            |    |           |
-    //            +    +--.---.----+---+-------+--- yMax
-    //            |    | / .'\ \   |   ^       ^
-    //  bearingX -|--->| | |  | |  |   |       |
-    //            |    | \ `-' /   | bearingY  |
-    //            |    | /("'``    |   |       |
-    // baseline---*----+-\-'---.-- +---+--*  height
-    //           /|    |  /'""'.\  |      |    |
-    //     origin |    | ||     || |      |    |
-    //            |    | \'. __//  |      |    v
-    //            |    +--`'---'---+------+----+--- yMin
-    //            |                       |
-    //            +------- advanceX ----->|
-    //
-    //
-    // (vertical layout)
-    // ============================================================= //
-    //
-    //                          origin
-    //                         /
-    //  baseline -+-----------*---------+------
-    //            |          |    |         |
-    //            | bearingX-|<---|      bearingY
-    //            |          |    |         |
-    //            |          |    |         v
-    //            |          +--.-+-.----+--------- yMax
-    //            |          | / .|\ \   |      ^
-    //            |          | | || | |  |      |
-    //            |          | \ `|' /   |      |
-    //        advanceY       | /("|``    |      |
-    //            |          | \ '|--.   |    height
-    //            |          |  /'|"'.\  |      |
-    //            |          | || |   || |      |
-    //            |          | \'.|__//  |      v
-    //            |          +--`'+--'---+--------- yMin
-    //            v          |    |      |
-    //            +----------+----*      |
-    //                       |           |
-    //                       |<- width ->|
-    //                       |           |
-    //                     xMin         xMax
-    //
-    // ============================================================= //
-
-
-
-    // =========================================================== //
-
-    struct TextHint
+    namespace text
     {
-        enum class FontSearch
+
+        // Glyph Metrics
+        // (horizontal layout)
+        // ============================================================= //
+        //
+        //               xMin         xMax
+        //            |    |           |
+        //            |    |<- width ->|
+        //            |    |           |
+        //            +    +--.---.----+---+-------+--- yMax
+        //            |    | / .'\ \   |   ^       ^
+        //  bearingX -|--->| | |  | |  |   |       |
+        //            |    | \ `-' /   | bearingY  |
+        //            |    | /("'``    |   |       |
+        // baseline---*----+-\-'---.-- +---+--*  height
+        //           /|    |  /'""'.\  |      |    |
+        //     origin |    | ||     || |      |    |
+        //            |    | \'. __//  |      |    v
+        //            |    +--`'---'---+------+----+--- yMin
+        //            |                       |
+        //            +------- advanceX ----->|
+        //
+        //
+        // (vertical layout)
+        // ============================================================= //
+        //
+        //                          origin
+        //                         /
+        //  baseline -+-----------*---------+------
+        //            |          |    |         |
+        //            | bearingX-|<---|      bearingY
+        //            |          |    |         |
+        //            |          |    |         v
+        //            |          +--.-+-.----+--------- yMax
+        //            |          | / .|\ \   |      ^
+        //            |          | | || | |  |      |
+        //            |          | \ `|' /   |      |
+        //        advanceY       | /("|``    |      |
+        //            |          | \ '|--.   |    height
+        //            |          |  /'|"'.\  |      |
+        //            |          | || |   || |      |
+        //            |          | \'.|__//  |      v
+        //            |          +--`'+--'---+--------- yMin
+        //            v          |    |      |
+        //            +----------+----*      |
+        //                       |           |
+        //                       |<- width ->|
+        //                       |           |
+        //                     xMin         xMax
+        //
+        // ============================================================= //
+
+
+
+        // =========================================================== //
+
+        struct TextHint
         {
-            Fallback,
-            Explicit
+            enum class FontSearch
+            {
+                Fallback,
+                Explicit
+            };
+
+            enum class Script
+            {
+                Single,
+                Multiple
+            };
+
+            enum class Direction
+            {
+                LeftToRight,
+                RightToLeft,
+                Multiple
+            };
+
+            std::vector<uint> list_prio_fonts;
+            std::vector<uint> list_fallback_fonts;
+
+            FontSearch font_search;
+            Direction direction;
+            Script script;
+
+            uint glyph_res_px;
         };
 
-        enum class Script
+        // =========================================================== //
+
+        // Glyph
+        // * struct to hold size, placement and
+        //   image information for a single glyph
+        // * TODO: change datatype sizes for nicer
+        //         struct packing (ie 24 or 32 bytes)
+        struct Glyph
         {
-            Single,
-            Multiple
+            // index
+            // * glyph index for given font's charmap
+            // * we dont keep track of unicode codepoint
+            //   because index <--> unicode codepoint
+            //   isnt a one-to-one mapping
+            u32 index; // keep index for 'missing glyph'
+            u32 atlas;
+            uint font;
+
+            // texture coords (pixels) for the top
+            // left corner of the glyph tex in its atlas
+            u16 tex_x;
+            u16 tex_y;
+
+            // sdf quad <--> glyph offset vector
+            // (pixels)
+            u16 sdf_x;
+            u16 sdf_y;
+
+            // metrics (pixels)
+            s16 bearing_x;
+            s16 bearing_y;
+            u16 width;
+            u16 height;
         };
 
-        enum class Direction
+        // Generated by TextShaper. Contains the glyph
+        // index lookups for freetype used by TextAtlas
+        // to render and lookup corresponding glyphs
+        struct GlyphInfo
         {
-            LeftToRight,
-            RightToLeft,
-            Multiple
+            // font glyph index
+            // * the index for a given glyph used to
+            //   lookup/render the glyph with freetype
+            // * '0' indicates a missing glyph
+            u32 index;
+
+            // cluster
+            // * Let a character index be defined as an index
+            //   for a codepoint in a UTF string: Then clusters
+            //   are the remaining logical character indices
+            //   after shaping has occured
+            // * I think this means that for example when individual
+            //   codepoints (say 'f' and 'i' at string indices 3,4)
+            //   are combined to form one grapheme cluster (the ligature
+            //   'fi'), @cluster will have the value 3 for both glyphs
+            u32 cluster;
+
+            // font index for TextAtlas
+            // * '0' indicates an invalid font
+            uint font;
         };
 
-        std::vector<uint> list_prio_fonts;
-        std::vector<uint> list_fallback_fonts;
+        // Generated by TextShaper to help compute
+        // final glyph positions
+        struct GlyphOffset
+        {
+            s16 offset_x;
+            s16 offset_y;
+            s16 advance_x;
+            s16 advance_y;
+        };
 
-        FontSearch font_search;
-        Direction direction;
-        Script script;
-
-        uint glyph_res_px;
-    };
-
-    // =========================================================== //
-
-    // Glyph
-    // * struct to hold size, placement and
-    //   image information for a single glyph
-    // * TODO: change datatype sizes for nicer
-    //         struct packing (ie 24 or 32 bytes)
-    struct Glyph
-    {
-        // index
-        // * glyph index for given font's charmap
-        // * we dont keep track of unicode codepoint
-        //   because index <--> unicode codepoint
-        //   isnt a one-to-one mapping
-        u32 index; // keep index for 'missing glyph'
-        u32 atlas;
-        uint font;
-
-        // texture coords (pixels) for the top
-        // left corner of the glyph tex in its atlas
-        u16 tex_x;
-        u16 tex_y;
-
-        // sdf quad <--> glyph offset vector
-        // (pixels)
-        u16 sdf_x;
-        u16 sdf_y;
-
-        // metrics (pixels)
-        s16 bearing_x;
-        s16 bearing_y;
-        u16 width;
-        u16 height;
-    };
-
-    // Generated by TextShaper. Contains the glyph
-    // index lookups for freetype used by TextAtlas
-    // to render and lookup corresponding glyphs
-    struct GlyphInfo
-    {
-        // font glyph index
-        // * the index for a given glyph used to
-        //   lookup/render the glyph with freetype
-        // * '0' indicates a missing glyph
-        u32 index;
-
-        // cluster
-        // * Let a character index be defined as an index
-        //   for a codepoint in a UTF string: Then clusters
-        //   are the remaining logical character indices
-        //   after shaping has occured
-        // * I think this means that for example when individual
-        //   codepoints (say 'f' and 'i' at string indices 3,4)
-        //   are combined to form one grapheme cluster (the ligature
-        //   'fi'), @cluster will have the value 3 for both glyphs
-        u32 cluster;
-
-        // font index for TextAtlas
-        // * '0' indicates an invalid font
-        uint font;
-    };
-
-    // Generated by TextShaper to help compute
-    // final glyph positions
-    struct GlyphOffset
-    {
-        s16 offset_x;
-        s16 offset_y;
-        s16 advance_x;
-        s16 advance_y;
-    };
-
-    struct GlyphPosition
-    {
-        s32 x0;
-        s32 y0;
-        s32 x1;
-        s32 y1;
-    };
-
+        struct GlyphPosition
+        {
+            s32 x0;
+            s32 y0;
+            s32 x1; // x1 is to the right of x0
+            s32 y1; // y1 is below y0
+        };
+    }
 } // raintk
 
 #endif // KS_TEXT_DATATYPES_HPP

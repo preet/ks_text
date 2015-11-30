@@ -186,6 +186,11 @@ namespace ks
             if(!(atlas_bin->AddRectangle(glyph_rect))) {
                 this->addEmptyAtlas();
                 atlas_bin = &(m_list_atlas_bins.back());
+                atlas_bin->AddRectangle(glyph_rect);
+
+                // TODO if the second add fails, we should
+                // throw; the glyph size might be bigger than
+                // the atlas size
             }
 
             // Add the glyph bitmap with a position offset
@@ -248,16 +253,6 @@ namespace ks
                               glyph_image.GetWidth(),
                               glyph_image.GetHeight());
 
-            // Notify listeners
-            signal_new_glyph.Emit(
-                        0,
-                        glm::u16vec2(
-                            glyph_rect.x,
-                            glyph_rect.y),
-                        shared_ptr<ks::ImageData>(
-                            glyph_image.
-                            ConvertToImageDataPtr().release()));
-
             // Save glyph
             // (ref)
             glyph.font  = glyph_info.font;
@@ -284,6 +279,16 @@ namespace ks
                                         glyphIsLessThanUB);
 
             list_glyphs.insert(glyph_it,glyph);
+
+            // Notify listeners
+            signal_new_glyph.Emit(
+                        glyph.atlas,
+                        glm::u16vec2(
+                            glyph_rect.x,
+                            glyph_rect.y),
+                        shared_ptr<ks::ImageData>(
+                            glyph_image.
+                            ConvertToImageDataPtr().release()));
         }
 
         std::vector<Glyph>::iterator TextAtlas::findGlyph(uint font_index,
