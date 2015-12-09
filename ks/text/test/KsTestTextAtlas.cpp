@@ -427,8 +427,8 @@ int main(int argc, char* argv[])
     // Create window
     gui::Window::Attributes win_attribs;
     gui::Window::Properties win_props;
-    win_props.width = 480;
-    win_props.height = 480;
+    win_props.width = 800;
+    win_props.height = 800;
 
     shared_ptr<gui::Window> window =
             app->CreateWindow(

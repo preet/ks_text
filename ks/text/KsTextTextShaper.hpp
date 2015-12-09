@@ -74,7 +74,8 @@ namespace ks
         std::vector<TextLine>
         ShapeText(std::string const &utf8text,
                   std::vector<unique_ptr<Font>> const &list_fonts,
-                  TextHint const &text_hint);
+                  TextHint const &text_hint,
+                  uint const max_line_width_px=std::numeric_limits<uint>::max());
 
     }
 }

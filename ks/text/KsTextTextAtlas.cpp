@@ -48,15 +48,21 @@ namespace ks
 
         }
 
-        void TextAtlas::AddFont()
+        void TextAtlas::AddFont(unique_ptr<Font> const &font)
         {
             m_lkup_font_glyph_list.push_back(GlyphList());
 
-            // Create the missing glyph if required
             if(m_lkup_font_glyph_list.size() == 1)
             {
+                // Setup the initial 'invalid' font
                 addEmptyAtlas();
                 genMissingGlyph();
+            }
+            else
+            {
+                // Assign a custom missing glyph
+                // to this font if required
+                assignMissingGlyph(font);
             }
         }
 
@@ -66,25 +72,30 @@ namespace ks
         {
             for(auto const &glyph_info : list_glyph_info)
             {
-                if(glyph_info.index == 0)
+                // Check for the zero-dimension glyphs first
+                if(glyph_info.zero_width)
                 {
-                    list_glyphs.push_back(m_missing_glyph);
-                    continue;
-                }
-
-                auto glyph_it = findGlyph(glyph_info.font,
-                                          glyph_info.index);
-
-                if(glyph_it == m_lkup_font_glyph_list[glyph_info.font].end())
-                {
-                    Glyph new_glyph;
-                    genGlyph(list_fonts,glyph_info,new_glyph);
-
-                    list_glyphs.push_back(new_glyph);
+                    Glyph empty_glyph;
+                    empty_glyph.index = glyph_info.index;
+                    empty_glyph.width = 0;
+                    empty_glyph.height = 0;
+                    list_glyphs.push_back(empty_glyph);
                 }
                 else
                 {
-                    list_glyphs.push_back(*glyph_it);
+                    auto glyph_it = findGlyph(glyph_info.font,glyph_info.index);
+
+                    if(glyph_it == m_lkup_font_glyph_list[glyph_info.font].end())
+                    {
+                        Glyph new_glyph;
+                        genGlyph(list_fonts,glyph_info,new_glyph);
+
+                        list_glyphs.push_back(new_glyph);
+                    }
+                    else
+                    {
+                        list_glyphs.push_back(*glyph_it);
+                    }
                 }
             }
         }
@@ -316,6 +327,74 @@ namespace ks
             }
 
             return glyph_it;
+        }
+
+        // rn: assignMissingGlyphIfReq
+        void TextAtlas::assignMissingGlyph(unique_ptr<Font> const &font)
+        {
+            // Generate a missing glyph for this font if
+            // it doesn't have one.
+
+            // We assume that @font belongs to the last added font
+
+            FT_Face &face = font->ft_face;
+            FT_Error const error = FT_Load_Glyph(face,0,FT_LOAD_RENDER);
+
+            if(error)
+            {
+                std::string desc = m_log_prefix;
+                desc += "Failed to render missing glyph: Font: ";
+                desc += font->name;
+                desc += ": ";
+                desc += GetFreeTypeError(error);
+
+                throw FreeTypeError(desc);
+            }
+
+            // The missing glyph must both have non-zero
+            // dimensions and a bitmap that isn't blank to
+            // be considered valid
+            FT_Glyph_Metrics &metrics = face->glyph->metrics;
+            u32 const metrics_width_px  = metrics.width/64;
+            u32 const metrics_height_px = metrics.height/64;
+
+            if(metrics_width_px*metrics_height_px == 0)
+            {
+                auto& list_glyphs = m_lkup_font_glyph_list.back();
+                list_glyphs.insert(list_glyphs.begin(),m_missing_glyph);
+                list_glyphs.back().font = m_lkup_font_glyph_list.size()-1;
+
+                return;
+            }
+
+            // Check that the bitmap has non-zero pixels
+            FT_Bitmap &bitmap = face->glyph->bitmap;
+            int const abs_pitch = abs(bitmap.pitch);
+
+            int offset = (bitmap.pitch > 0) ?
+                        0 : (abs_pitch * (bitmap.rows-1));
+
+            bool pixel_filled = false;
+            for(int r=0; r < bitmap.rows; r++)
+            {
+                for(int c=0; c < bitmap.width; c++)
+                {
+                    if(bitmap.buffer[offset+c] > 0)
+                    {
+                        pixel_filled = true;
+                        break;
+                    }
+                }
+                offset += bitmap.pitch;
+            }
+
+            if(pixel_filled == false)
+            {
+                auto& list_glyphs = m_lkup_font_glyph_list.back();
+                list_glyphs.insert(list_glyphs.begin(),m_missing_glyph);
+                list_glyphs.back().font = m_lkup_font_glyph_list.size()-1;
+                return;
+            }
         }
 
         void TextAtlas::genMissingGlyph()

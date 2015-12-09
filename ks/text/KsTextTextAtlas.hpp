@@ -52,7 +52,7 @@ namespace ks
                       uint glyph_res_px=32,
                       uint sdf_offset_px=4);
 
-            void AddFont();
+            void AddFont(unique_ptr<Font> const &font);
 
             void GetGlyphs(std::vector<unique_ptr<Font>> const &list_fonts,
                            std::vector<GlyphInfo> const &list_glyph_info,
@@ -89,8 +89,9 @@ namespace ks
             std::vector<Glyph>::iterator findGlyph(uint font_index,
                                                    uint glyph_index);
 
-            void genMissingGlyph();
 
+            void assignMissingGlyph(unique_ptr<Font> const &font);
+            void genMissingGlyph();
             void addEmptyAtlas();
 
             // lower bound compare predicate
@@ -113,6 +114,7 @@ namespace ks
 
             // lkup_font_glyph_list
             // * Glyph lists indexed by font
+            // * Each glyph list is ordered by glyph index
             using GlyphList = std::vector<Glyph>;
             std::vector<std::vector<Glyph>> m_lkup_font_glyph_list;
 

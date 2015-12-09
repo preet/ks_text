@@ -17,7 +17,6 @@
 #include <catch/catch.hpp>
 
 #include <ks/text/KsTextTextManager.hpp>
-#include <ks/text/KsTextFont.hpp>
 
 namespace ks_test_text
 {

@@ -92,6 +92,10 @@ namespace ks
             {
                 g_ft_context = make_shared<FreeTypeContext>();
             }
+
+            // We don't init the invalid font w initial atlas
+            // here because the corresponding signals can't
+            // be connected to until after the constructor
         }
 
         TextManager::~TextManager()
@@ -109,7 +113,7 @@ namespace ks
                 invalid_font->name = "invalid";
                 m_list_fonts.push_back(std::move(invalid_font));
 
-                m_text_atlas->AddFont();
+                m_text_atlas->AddFont(invalid_font);
             }
 
             m_list_fonts.push_back(make_unique<Font>());
@@ -125,7 +129,7 @@ namespace ks
             font->hb_font = hb_ft_font_create(font->ft_face,NULL);
 
             // Update atlas
-            m_text_atlas->AddFont();
+            m_text_atlas->AddFont(font);
         }
 
         void TextManager::AddFont(std::string font_name,
@@ -138,7 +142,7 @@ namespace ks
                 invalid_font->name = "invalid";
                 m_list_fonts.push_back(std::move(invalid_font));
 
-                m_text_atlas->AddFont();
+                m_text_atlas->AddFont(invalid_font);
             }
 
             m_list_fonts.push_back(make_unique<Font>());
@@ -154,7 +158,7 @@ namespace ks
             font->hb_font = hb_ft_font_create(font->ft_face,NULL);
 
             // Update atlas
-            m_text_atlas->AddFont();
+            m_text_atlas->AddFont(font);
         }
 
         TextHint TextManager::CreateHint(std::string const &prio_fonts,

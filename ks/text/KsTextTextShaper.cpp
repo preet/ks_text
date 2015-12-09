@@ -49,25 +49,27 @@ namespace ks
             // * A run is a contiguous grouping of glyphs
             // * UTF16 is used for the indices because thats
             //   what ICU uses
+            // * start,end are both indices into a utf16 string,
+            //   thus they represent code units
             struct Run
             {
-                Run(u32 start, u32 end) :
+                Run(uint start, uint end) :
                     start(start),
                     end(end)
                 {
                     // empty
                 }
 
-                u32 start;
-                u32 end;
+                uint start;
+                uint end;
             };
 
             // FontRun, ScriptLangRun, DirectionRun
             // * run with the same font, script, direction
             struct FontRun : Run
             {
-                FontRun(u32 start,
-                        u32 end,
+                FontRun(uint start,
+                        uint end,
                         uint font) :
                     Run(start,end),
                     font(font)
@@ -81,8 +83,8 @@ namespace ks
             struct ScriptLangRun : Run
 
             {
-                ScriptLangRun(u32 start,
-                              u32 end,
+                ScriptLangRun(uint start,
+                              uint end,
                               hb_script_t script) :
                     Run(start,end),
                     script(script)
@@ -95,8 +97,8 @@ namespace ks
 
             struct DirectionRun : Run
             {
-                DirectionRun(u32 start,
-                             u32 end,
+                DirectionRun(uint start,
+                             uint end,
                              hb_direction_t dirn) :
                     Run(start,end),
                     dirn(dirn)
@@ -111,8 +113,6 @@ namespace ks
             // * A text run is a run where each glyph in
             //   between start and end share the same font,
             //   script and direction
-            // * The start and end indices are codepoint offsets
-            //   in TextParagraph.utf16text
             struct TextRun : Run
             {
                 TextRun() :
@@ -133,8 +133,15 @@ namespace ks
             struct TextParagraph
             {
                 icu::UnicodeString utf16text;
-                u32 utf16count; // num utf16 indices
-                u32 codepoint_count;
+
+                // The number of UTF-16 code units. Each code point
+                // is encoded with either one or two 16-bit code units
+                // (utf16count >= codepoint_count)
+                u32 num_codeunits;
+
+                // The number of 'characters' (including combining
+                // marks, accents, etc)
+                u32 num_codepoints;
 
                 std::vector<FontRun> list_font_runs;
                 std::vector<ScriptLangRun> list_script_runs;
@@ -143,9 +150,70 @@ namespace ks
 
                 std::vector<TextLine> list_lines;
 
-                // clusters where we can break
-                std::vector<u32> list_breaks;
+                // list_break_data.size == codepoint_count.
+                // Contains one of the following values for each code point:
+                // 0 - Line break must occur
+                // 1 - Line break is allowed
+                // 2 - Line break is not allowed
+                // 3 - Invalid; in the middle of a codepoint
+                std::vector<u8> list_break_data;
             };
+
+            // =========================================================== //
+
+            void PrintFontRuns(std::vector<FontRun> const &list_font_runs)
+            {
+                std::string output;
+                std::vector<FontRun>::const_iterator it;
+                for(it  = list_font_runs.begin();
+                    it != list_font_runs.end(); ++it)
+                {
+                    std::string rundata = "[" +
+                            ks::to_string(it->start) + "," +
+                            ks::to_string(it->end) + "," +
+                            ks::to_string(it->font) + "], ";
+                    output += rundata;
+                }
+                LOG.Info() << "FontRun:" << output;
+            }
+
+            // =========================================================== //
+
+            void PrintBreakData(std::vector<u8> const &list_break_data)
+            {
+                std::string s;
+
+                for(auto b : list_break_data)
+                {
+                    std::string desc;
+
+                    if(b == LINEBREAK_ALLOWBREAK)
+                    {
+                        desc = "A";
+                    }
+                    else if(b == LINEBREAK_NOBREAK)
+                    {
+                        desc = "N";
+                    }
+                    else if(b == LINEBREAK_INSIDEACHAR)
+                    {
+                        desc = "I";
+                    }
+                    else if(b == LINEBREAK_MUSTBREAK)
+                    {
+                        desc = "M";
+                    }
+                    else
+                    {
+
+                    }
+
+                    s += desc;
+                    s += ",";
+                }
+
+                LOG.Info() << "BreakData: " << s;
+            }
 
             // =========================================================== //
 
@@ -154,45 +222,29 @@ namespace ks
                              TextParagraph &para)
             {
                 // StringCharacterIterator iterates through the
-                // string by codepoint not code units, so num.
-                // of iterations might != utf16text.length
-
-                // Specifically a single code point may be made
-                // up of multiple code units (ie in utf8 and utf16)
-                icu::StringCharacterIterator utf16char_it(para.utf16text);
+                // string by codepoint not code units
+                icu::StringCharacterIterator utf16_cp_it(para.utf16text);
 
                 // Get the font index for each glyph
                 std::vector<uint> list_glyph_fonts;
-
-                // utf16text.length() == num code units, not num code points
-                list_glyph_fonts.reserve(para.utf16text.length());
+                list_glyph_fonts.reserve(para.num_codeunits);
 
                 if(text_hint.font_search == TextHint::FontSearch::Explicit)
                 {
                     // If the FontSearch mode is Explicit, we only search
                     // the specified font and set a missing glyph if no
                     // corresponding character exists
-                    auto const &font = list_fonts[text_hint.list_prio_fonts[0]];
-
-                    while(utf16char_it.hasNext())
+                    sint prev_index = -1;
+                    while(utf16_cp_it.hasNext())
                     {
-                        u32 const unicode = utf16char_it.next32PostInc();
+                        sint curr_index = utf16_cp_it.getIndex();
+                        sint codepoint_sz = curr_index-prev_index;
+                        prev_index = curr_index;
 
-                        // We determine whether or not the codepoint is
-                        // available for this font using FT_Get_Char_Index;
-                        // this is probably faster than checking glyphs
-                        // saved under font->list_glyphs.
-                        // TODO: look into FTC_CMapCache_Lookup
-
-                        FT_UInt const glyph_index =
-                                FT_Get_Char_Index(font->ft_face,unicode);
-
-                        if(glyph_index == 0) {
-                            list_glyph_fonts.push_back(0);
-                        }
-                        else {
-                            list_glyph_fonts.push_back(text_hint.list_prio_fonts[0]);
-                        }
+                        list_glyph_fonts.insert(
+                                    list_glyph_fonts.end(),
+                                    codepoint_sz,
+                                    text_hint.list_prio_fonts[0]);
                     }
                 }
                 else
@@ -203,10 +255,16 @@ namespace ks
 
                     // If the FontSearch mode is Fallback, we search through
                     // all fonts to find a match for each glyph
-                    while(utf16char_it.hasNext())
+                    sint prev_index = -1;
+                    while(utf16_cp_it.hasNext())
                     {
+                        sint curr_index = utf16_cp_it.getIndex();
+                        sint codepoint_sz = curr_index-prev_index;
+                        prev_index = curr_index;
+
+                        u32 const unicode = utf16_cp_it.next32PostInc();
+
                         FT_UInt glyph_index = 0;
-                        u32 const unicode = utf16char_it.next32PostInc();
 
                         // Check the priority fonts first
                         for(auto const idx : text_hint.list_prio_fonts)
@@ -214,9 +272,12 @@ namespace ks
                             auto const &font = list_fonts[idx];
 
                             glyph_index = FT_Get_Char_Index(font->ft_face,unicode);
+
                             if(glyph_index != 0)
                             {
-                                list_glyph_fonts.push_back(idx);
+                                list_glyph_fonts.insert(
+                                            list_glyph_fonts.end(),
+                                            codepoint_sz,idx);
                                 break;
                             }
                         }
@@ -242,38 +303,57 @@ namespace ks
                                     list_fallback_fonts.insert(list_fallback_fonts.begin(),idx);
                                 }
 
-                                list_glyph_fonts.push_back(idx);
+                                list_glyph_fonts.insert(
+                                            list_glyph_fonts.end(),
+                                            codepoint_sz,idx);
                                 break;
                             }
                         }
 
                         // There's no valid font for this glyph
                         if(glyph_index == 0)
-                        {
-                            list_glyph_fonts.push_back(0);
+                        {                           
+                            if(text_hint.list_prio_fonts.empty() == false)
+                            {
+                                list_glyph_fonts.insert(
+                                            list_glyph_fonts.end(),
+                                            codepoint_sz,
+                                            text_hint.list_prio_fonts[0]);
+                            }
+                            else
+                            {
+                                list_glyph_fonts.insert(
+                                            list_glyph_fonts.end(),
+                                            codepoint_sz,
+                                            text_hint.list_fallback_fonts[0]);
+                            }
                         }
                     }
                 }
 
                 // Group the text into runs with the same font
-                para.list_font_runs.reserve(para.utf16text.length()+1);
-                para.list_font_runs.push_back(
-                            FontRun(0,1,std::numeric_limits<uint>::max())); // dummy to make adding runs easier
+                para.list_font_runs.reserve(para.num_codeunits+1);
 
-                u32 utf16char_pos=0;
+                // dummy to make adding runs easier
+                para.list_font_runs.push_back(
+                            FontRun(0,1,std::numeric_limits<uint>::max()));
+
+                u32 codeunit_pos=0;
                 std::vector<uint>::const_iterator font_it;
                 for(font_it  = list_glyph_fonts.begin();
                     font_it != list_glyph_fonts.end(); ++font_it)
                 {
-                    if(para.list_font_runs.back().font != (*font_it)) {
-                        para.list_font_runs.back().end = utf16char_pos;
+                    if(para.list_font_runs.back().font != (*font_it))
+                    {
+                        para.list_font_runs.back().end = codeunit_pos;
                         para.list_font_runs.push_back(
-                                    FontRun(utf16char_pos,
-                                            utf16char_pos+1,
+                                    FontRun(codeunit_pos,
+                                            codeunit_pos+1,
                                             (*font_it)));
                     }
-                    utf16char_pos++;
+                    codeunit_pos++;
                 }
+
                 // remove dummy and set last font run end
                 para.list_font_runs.erase(para.list_font_runs.begin());
                 para.list_font_runs.back().end = list_glyph_fonts.size();
@@ -299,11 +379,16 @@ namespace ks
 
             void ItemizeScript(TextParagraph &para)
             {
+                // getScriptStart/End return indices for the utf16text,
+                // buffer so they represent code units
+
                 para.list_script_runs.reserve(para.utf16text.length());
 
                 icu_extra::ScriptRun script_run(para.utf16text.getBuffer(),
                                                 para.utf16text.length());
-                while(script_run.next()) {
+
+                while(script_run.next())
+                {
                     ScriptLangRun run(script_run.getScriptStart(),
                                       script_run.getScriptEnd(),
                                       IcuScriptToHB(script_run.getScriptCode()));
@@ -448,7 +533,7 @@ namespace ks
                 // * note the reverse order of text runs within
                 //   the same RTL run
 
-                para.list_runs.reserve(para.codepoint_count); // worst case
+                para.list_runs.reserve(para.num_codepoints); // worst case
 
                 std::vector<std::vector<Run const *>> list_all_runs(2); // font, script
 
@@ -523,10 +608,14 @@ namespace ks
                            TextParagraph &para,
                            u32 const line_idx)
             {
+                (void)text_hint;
+
                 hb_buffer_t * hb_buff = hb_buffer_create();
                 TextLine &line = para.list_lines[line_idx];
                 line.list_glyph_info.clear();
                 line.list_glyph_offsets.clear();
+
+                auto const utf16buff = para.utf16text.getBuffer();
 
                 // for each text run
                 std::vector<TextRun>::const_iterator run_it;
@@ -543,42 +632,6 @@ namespace ks
                     u32 start_idx  = std::max(line.start,run_it->start);
                     u32 end_idx    = std::min(line.end,run_it->end);
 
-                    // If this run has no valid font available, replace
-                    // all of its chars with a missing glyph
-                    if(run_it->font == 0)
-                    {
-                        size_t const run_length = end_idx - start_idx;
-
-                        s32 start,next;
-                        if(run_it->dirn == HB_DIRECTION_LTR) {
-                            start   = start_idx;
-                            next    = 1;
-                        }
-                        else {
-                            start   = end_idx-1;
-                            next    = -1;
-                        }
-                        for(size_t i=0; i < run_length; i++) {
-                            // Use the 'Missing' glyph
-                            u32 cluster = start + (i*next);
-
-                            GlyphInfo glyph_info;
-                            glyph_info.font = 0;
-                            glyph_info.index = 0;
-                            glyph_info.cluster = cluster;
-
-                            GlyphOffset glyph_offset;
-                            glyph_offset.advance_x = text_hint.glyph_res_px;
-                            glyph_offset.advance_y = 0;
-                            glyph_offset.offset_x  = 0;
-                            glyph_offset.offset_y  = 0;
-
-                            line.list_glyph_info.push_back(glyph_info);
-                            line.list_glyph_offsets.push_back(glyph_offset);
-                        }
-                        continue;
-                    }
-
                     // prepare harfbuzz
                     hb_buffer_clear_contents(hb_buff);
                     hb_buffer_set_script(hb_buff,run_it->script);
@@ -594,7 +647,7 @@ namespace ks
                     hb_shape(list_fonts[run_it->font]->hb_font,
                              hb_buff,NULL,0);
 
-                    u32 const glyph_count =
+                    uint const glyph_count =
                             hb_buffer_get_length(hb_buff);
 
                     hb_glyph_info_t * hb_list_glyph_info =
@@ -607,7 +660,7 @@ namespace ks
                     line.list_glyph_offsets.reserve(glyph_count);
 
                     // save glyph info and offsets
-                    for(size_t i=0; i < glyph_count; i++)
+                    for(uint i=0; i < glyph_count; i++)
                     {
                         hb_glyph_info_t const &hb_glyph_info =
                                 hb_list_glyph_info[i];
@@ -615,49 +668,32 @@ namespace ks
                         hb_glyph_position_t const &hb_glyph_pos =
                                 hb_list_glyph_pos[i];
 
-                        if(hb_glyph_info.codepoint) {
-                            GlyphInfo glyph_info;
-                            glyph_info.index     = hb_glyph_info.codepoint;
-                            glyph_info.cluster   = hb_glyph_info.cluster;
-                            glyph_info.font      = run_it->font;
-                            line.list_glyph_info.push_back(glyph_info);
+                        GlyphInfo glyph_info;
+                        glyph_info.index = hb_glyph_info.codepoint;
+                        glyph_info.cluster = hb_glyph_info.cluster;
+                        glyph_info.font = run_it->font;
 
-                            GlyphOffset glyph_offset;
-                            glyph_offset.advance_x = hb_glyph_pos.x_advance/64.0;
-                            glyph_offset.advance_y = hb_glyph_pos.y_advance/64.0;
-                            glyph_offset.offset_x  = hb_glyph_pos.x_offset/64.0;
-                            glyph_offset.offset_y  = hb_glyph_pos.y_offset/64.0;
-                            line.list_glyph_offsets.push_back(glyph_offset);
+                        // We special case whitespace line breaking characters
+                        // (0x09 to 0x0D), which include CR, LF, FF, h and v tab
+                        // and set them to zero-width so they aren't shown.
 
-                            // debug
-                            // SYNCSGLOG << "--" << i << "--";
-                            // SYNCSGLOG << "adv_x: " << int(glyph_offset.advance_x);
-                            // SYNCSGLOG << "adv_y: " << int(glyph_offset.advance_y);
-                            // SYNCSGLOG << "off_x: " << int(glyph_offset.offset_x);
-                            // SYNCSGLOG << "off_y: " << int(glyph_offset.offset_y);
-                        }
-                        else {
-                            // Handle missing glyphs
-                            // Its very unlikely that we'll get here as Font
-                            // itemization should have segmented missing glyph
-                            // runs out. However if harfbuzz shaping merges/changes
-                            // any glyphs and the font doesn't have the required
-                            // symbol (can that even occur?) we substitute in the
-                            // default missing glyph.
-                            GlyphInfo glyph_info;
-                            glyph_info.font = 0;
-                            glyph_info.index = 0;
-                            glyph_info.cluster = hb_glyph_info.cluster;
+                        // This also makes it straight forward to skip them when
+                        // moving through text with a cursor.
 
-                            GlyphOffset glyph_offset;
-                            glyph_offset.advance_x = text_hint.glyph_res_px;
-                            glyph_offset.advance_y = 0;
-                            glyph_offset.offset_x  = 0;
-                            glyph_offset.offset_y  = 0;
+                        // (the cluster is an offset into the buffer)
 
-                            line.list_glyph_info.push_back(glyph_info);
-                            line.list_glyph_offsets.push_back(glyph_offset);
-                        }
+                        glyph_info.zero_width =
+                                (utf16buff[hb_glyph_info.cluster] >= 9 &&
+                                 utf16buff[hb_glyph_info.cluster] <= 13);
+
+                        line.list_glyph_info.push_back(glyph_info);
+
+                        GlyphOffset glyph_offset;
+                        glyph_offset.advance_x = hb_glyph_pos.x_advance/64;
+                        glyph_offset.advance_y = hb_glyph_pos.y_advance/64;
+                        glyph_offset.offset_x  = hb_glyph_pos.x_offset/64;
+                        glyph_offset.offset_y  = hb_glyph_pos.y_offset/64;
+                        line.list_glyph_offsets.push_back(glyph_offset);
                     }
                 }
 
@@ -666,6 +702,81 @@ namespace ks
 
             // =========================================================== //
 
+            void FindLineBreaks(TextParagraph& para)
+            {
+                static bool init_libunibreak = false;
+                if(!init_libunibreak)
+                {
+                    init_linebreak();
+                    init_libunibreak = true;
+                }
+
+                // We pass utf16 string data to Harfbuzz so
+                // cluster indices are utf16 string indices.
+
+                // We want the linebreaks to match up so we
+                // use utf16 here as well.
+                utf16_t const * utf16text_data =
+                        reinterpret_cast<utf16_t const *>(
+                            para.utf16text.getBuffer());
+
+                char const * lang = ""; // default to no language
+                auto const num_cu = para.num_codeunits;
+                char linebreaks[num_cu];
+                set_linebreaks_utf16(utf16text_data,
+                                     num_cu,
+                                     lang,
+                                     linebreaks);
+                // save line breaks
+                para.list_break_data.reserve(num_cu);
+                for(uint i=0; i < num_cu; i++)
+                {
+                    para.list_break_data.push_back(linebreaks[i]);
+                }
+
+                // Unicode's breaking rules specify that you
+                // must always break at the end of text (see LB3):
+                // http://unicode.org/reports/tr14/#BreakingRules
+
+                // Since we create a new line every time a mandatory
+                // break is encountered, set the last character to
+                // be a NOBREAK instead iff the last character isn't
+                // a LF or a CR
+                if(para.list_break_data[num_cu-1] == LINEBREAK_MUSTBREAK)
+                {
+                    if(para.num_codeunits > 1)
+                    {
+                        if(para.list_break_data[num_cu-2] != LINEBREAK_INSIDEACHAR)
+                        {
+                            auto const utf16char = utf16text_data[num_cu-1];
+
+                            // LF: 10, CR: 13
+                            bool is_newline = (utf16char == 10 || utf16char == 13);
+
+                            if(is_newline == false)
+                            {
+                                para.list_break_data[num_cu-1] = LINEBREAK_NOBREAK;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // =========================================================== //
+
+            void CreateNewLine(TextParagraph& para,
+                               uint line_index,
+                               uint break_index)
+            {
+                // Break and reshape
+                TextLine& line = para.list_lines[line_index];
+
+                TextLine line_next;
+                line_next.start = break_index+1;
+                line_next.end = line.end;
+                line.end = line_next.start;
+                para.list_lines.push_back(line_next);
+            }
         }
 
         // =========================================================== //
@@ -673,12 +784,13 @@ namespace ks
         std::vector<TextLine>
         ShapeText(std::string const &utf8text,
                   std::vector<unique_ptr<Font>> const &list_fonts,
-                  TextHint const &text_hint)
+                  TextHint const &text_hint,
+                  uint const max_line_width_px)
         {
             TextParagraph para;
             para.utf16text = icu::UnicodeString::fromUTF8(utf8text);
-            para.utf16count = para.utf16text.length();
-            para.codepoint_count = para.utf16text.countChar32();
+            para.num_codeunits = para.utf16text.length();
+            para.num_codepoints = para.utf16text.countChar32();
 
             if(text_hint.direction != TextHint::Direction::Multiple &&
                text_hint.script == TextHint::Script::Single)
@@ -700,10 +812,73 @@ namespace ks
             // of the text to the paragraph
             para.list_lines.push_back(TextLine());
             para.list_lines.back().start = 0;
-            para.list_lines.back().end = para.utf16count;
+            para.list_lines.back().end = para.num_codeunits;
 
             // Shape the first line
             ShapeLine(list_fonts,text_hint,para,0);
+
+            // Find all line breaks in the text
+            FindLineBreaks(para);
+            PrintBreakData(para.list_break_data);
+
+            // Get the advances for each cluster in the text
+            std::vector<s32> list_cluster_adv(para.num_codeunits,0);
+
+            {
+                std::vector<GlyphInfo> const &ls_glyph_info =
+                        para.list_lines.back().list_glyph_info;
+
+                std::vector<GlyphOffset> const &ls_glyph_offsets =
+                        para.list_lines.back().list_glyph_offsets;
+
+                for(size_t i=0; i < ls_glyph_info.size(); i++)
+                {
+                    list_cluster_adv[ls_glyph_info[i].cluster] +=
+                            ls_glyph_offsets[i].advance_x;
+                }
+            }
+
+            // Continually split the text into lines until all
+            // lines are below the max_width (or breaking is
+            // no longer possible)
+            uint lk_break_cu=0;
+
+            for(uint i = 0; i < para.list_lines.size(); i++)
+            {
+                TextLine& line = para.list_lines.back();
+
+                uint combined_adv = 0;
+
+                // For each codeunit in the line
+                for(uint cu = line.start; cu < line.end; cu++)
+                {
+                    // Check if we have to break (newline, etc)
+                    if(para.list_break_data[cu] == LINEBREAK_MUSTBREAK)
+                    {
+                        CreateNewLine(para,i,cu);
+                        ShapeLine(list_fonts,text_hint,para,para.list_lines.size()-2);
+                        ShapeLine(list_fonts,text_hint,para,para.list_lines.size()-1);
+                        break;
+                    }
+                    else if(para.list_break_data[cu] == LINEBREAK_ALLOWBREAK)
+                    {
+                        lk_break_cu = cu;
+                    }
+
+                    combined_adv += list_cluster_adv[cu];
+
+                    if(combined_adv > max_line_width_px)
+                    {
+                        if(lk_break_cu > line.start)
+                        {
+                            CreateNewLine(para,i,lk_break_cu);
+                            ShapeLine(list_fonts,text_hint,para,para.list_lines.size()-2);
+                            ShapeLine(list_fonts,text_hint,para,para.list_lines.size()-1);
+                            break;
+                        }
+                    }
+                }
+            }
 
             return para.list_lines;
         }
