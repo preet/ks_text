@@ -22,7 +22,7 @@
 #include <ks/KsSignal.hpp>
 #include <ks/shared/KsImage.hpp>
 #include <ks/shared/KsBinPackShelf.hpp>
-#include <ks/text/KsTextDataTypes.hpp>
+#include <ks/text/KsTextGlyphDesc.hpp>
 
 namespace ks
 {
@@ -56,7 +56,7 @@ namespace ks
 
             void GetGlyphs(std::vector<unique_ptr<Font>> const &list_fonts,
                            std::vector<GlyphInfo> const &list_glyph_info,
-                           std::vector<Glyph> &list_glyphs);
+                           std::vector<GlyphImageDesc> &list_glyphs);
 
             uint GetAtlasSizePx() const;
             uint GetGlyphResolutionPx() const;
@@ -84,9 +84,9 @@ namespace ks
         private:
             void genGlyph(std::vector<unique_ptr<Font>> const &list_fonts,
                           GlyphInfo const &glyph_info,
-                          Glyph &glyph);
+                          GlyphImageDesc &glyph);
 
-            std::vector<Glyph>::iterator findGlyph(uint font_index,
+            std::vector<GlyphImageDesc>::iterator findGlyph(uint font_index,
                                                    uint glyph_index);
 
 
@@ -95,10 +95,10 @@ namespace ks
             void addEmptyAtlas();
 
             // lower bound compare predicate
-            static bool glyphIsLessThanLB(Glyph const &glyph,u32 index);
+            static bool glyphIsLessThanLB(GlyphImageDesc const &glyph,u32 index);
 
             // upper bound compare predicate
-            static bool glyphIsLessThanUB(u32 index,Glyph const &glyph);
+            static bool glyphIsLessThanUB(u32 index,GlyphImageDesc const &glyph);
 
 
             static const std::string m_log_prefix;
@@ -110,13 +110,13 @@ namespace ks
             // missing_glyph
             // * universal 'missing' glyph used when
             //   a character isn't available for a font
-            Glyph m_missing_glyph;
+            GlyphImageDesc m_missing_glyph;
 
             // lkup_font_glyph_list
             // * Glyph lists indexed by font
             // * Each glyph list is ordered by glyph index
-            using GlyphList = std::vector<Glyph>;
-            std::vector<std::vector<Glyph>> m_lkup_font_glyph_list;
+            using GlyphList = std::vector<GlyphImageDesc>;
+            std::vector<std::vector<GlyphImageDesc>> m_lkup_font_glyph_list;
 
             // list_atlas_bins
             // * list of packing bins and images for all glyphs

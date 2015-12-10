@@ -6,6 +6,7 @@ INCLUDEPATH += $${PATH_KS_TEXT}/thirdparty
 
 HEADERS += \
     $${PATH_KS_TEXT}/KsTextDataTypes.hpp \
+    $${PATH_KS_TEXT}/KsTextGlyphDesc.hpp \
     $${PATH_KS_TEXT}/KsTextFreeType.hpp \
     $${PATH_KS_TEXT}/KsTextFont.hpp \
     $${PATH_KS_TEXT}/KsTextTextAtlas.hpp \

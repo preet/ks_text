@@ -22,6 +22,7 @@
 #include <ks/KsSignal.hpp>
 #include <ks/KsException.hpp>
 #include <ks/text/KsTextDataTypes.hpp>
+#include <ks/text/KsTextGlyphDesc.hpp>
 
 namespace ks
 {
@@ -50,6 +51,20 @@ namespace ks
             ~FontFileInvalid() = default;
         };
 
+        class NoFontsAvailable : public ks::Exception
+        {
+        public:
+            NoFontsAvailable();
+            ~NoFontsAvailable() = default;
+        };
+
+        class HintInvalid : public ks::Exception
+        {
+        public:
+            HintInvalid();
+            ~HintInvalid() = default;
+        };
+
         // =========================================================== //
 
         class TextAtlas;
@@ -67,7 +82,7 @@ namespace ks
                 sint y_min; // equivalent to descent
                 sint y_max; // equivalent to ascent
 
-                std::vector<Glyph> list_glyphs;
+                std::vector<GlyphImageDesc> list_glyphs;
                 std::vector<GlyphPosition> list_glyph_pos;
             };
 
@@ -97,15 +112,17 @@ namespace ks
             void AddFont(std::string font_name,
                          unique_ptr<std::vector<u8>> file_data);
 
-            TextHint CreateHint(std::string const &list_prio_fonts="",
-                                TextHint::FontSearch font_search_hint=TextHint::FontSearch::Fallback,
-                                TextHint::Direction dirn_hint=TextHint::Direction::Multiple,
-                                TextHint::Script script_hint=TextHint::Script::Multiple);
+            Hint CreateHint(std::string const &list_prio_fonts="",
+                            Hint::FontSearch font_search_hint=Hint::FontSearch::Fallback,
+                            Hint::Direction dirn_hint=Hint::Direction::Multiple,
+                            Hint::Script script_hint=Hint::Script::Multiple);
 
-            void GetGlyphs(std::string const &utf8text,
-                           TextHint const text_hint,
-                           std::vector<Glyph>& list_glyphs,
-                           std::vector<GlyphPosition>& list_glyph_pos);
+            unique_ptr<std::vector<Line>>
+            GetGlyphs(std::u16string const &utf16text,
+                      Hint const &text_hint);
+
+            static std::u16string ConvertStringUTF8ToUTF16(std::string const &utf8text);
+
 
             // uint: atlas index
             Signal<uint,uint> * const signal_new_atlas;

@@ -19,6 +19,7 @@
 
 #include <ks/KsException.hpp>
 #include <ks/text/KsTextDataTypes.hpp>
+#include <ks/text/KsTextGlyphDesc.hpp>
 
 namespace ks
 {
@@ -50,31 +51,44 @@ namespace ks
 
         struct Font;
 
-        // TextLine
-        // * A TextLine is a run of text meant to represent
-        //   a single line created as the result of line
-        //   breaking a TextParagraph
-        // * The start and end indices are codepoint offsets
-        //   in TextParagraph.utf16text
-        // * A given TextLine may span multiple TextRuns;
-        //   'start' and 'end' are determined via line breaking
-        struct TextLine
+        // ShapedLine
+        // * A ShapedLine represents a single line of text
+        //   in @utf16text after it has been shaped
+        struct ShapedLine
         {
-            u32 start;
-            u32 end;
+            // start and end are indices into ShapeText's
+            // @utf16text param
+            uint start;
+            uint end;
 
-            // combined advance
-            //s32 width;
+            // This is the vertical spacing between this line
+            // and the next, determined by getting the max line
+            // height of all the font faces used in this line
+            uint spacing;
 
-            // these are in VISUAL order
+            // These are in visual order
             std::vector<GlyphInfo> list_glyph_info;
             std::vector<GlyphOffset> list_glyph_offsets;
         };
 
-        std::vector<TextLine>
-        ShapeText(std::string const &utf8text,
+        // * Helper function that converts a UTF8 string to UTF16
+        // * We don't use the stl because libstdc++ has a bug in
+        //   codecvt_utf8_utf16 and it requires detecting endianness
+        //   at compile time (?)
+        // * Since we use ICU to do script detection and bidi, we
+        //   may as well do the conversion with it too since this
+        //   way everything will match up
+        std::u16string ConvertStringUTF8ToUTF16(std::string const &utf8text);
+
+        // ShapeText
+        // * This function shapes @utf16text and returns the
+        //   result in a list of ShapedLines that can be used
+        //   to help render text
+        // * Line breaking occurs against @max_line_width_px
+        unique_ptr<std::vector<ShapedLine>>
+        ShapeText(std::u16string const &utf16text,
                   std::vector<unique_ptr<Font>> const &list_fonts,
-                  TextHint const &text_hint,
+                  Hint const &text_hint,
                   uint const max_line_width_px=std::numeric_limits<uint>::max());
 
     }

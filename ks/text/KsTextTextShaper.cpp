@@ -34,7 +34,7 @@ namespace ks
 {
     namespace text
     {
-        // =========================================================== //    
+        // =========================================================== //
 
         TextShaperError::TextShaperError(std::string msg) :
             ks::Exception(ks::Exception::ErrorLevel::ERROR,std::move(msg))
@@ -127,10 +127,10 @@ namespace ks
             };
 
 
-            // TextParagraph
-            // * A TextParagraph is the container object that holds
+            // ParagraphDesc
+            // * A ParagraphDesc is the container object that holds
             //   data required for shaping a single text string
-            struct TextParagraph
+            struct ParagraphDesc
             {
                 icu::UnicodeString utf16text;
 
@@ -148,7 +148,7 @@ namespace ks
                 std::vector<DirectionRun> list_dirn_runs;
                 std::vector<TextRun> list_runs;
 
-                std::vector<TextLine> list_lines;
+                unique_ptr<std::vector<ShapedLine>> list_lines;
 
                 // list_break_data.size == codepoint_count.
                 // Contains one of the following values for each code point:
@@ -205,7 +205,7 @@ namespace ks
                     }
                     else
                     {
-
+                        desc = "linebreak error";
                     }
 
                     s += desc;
@@ -218,8 +218,8 @@ namespace ks
             // =========================================================== //
 
             void ItemizeFont(std::vector<unique_ptr<Font>> const &list_fonts,
-                             TextHint const &text_hint,
-                             TextParagraph &para)
+                             Hint const &text_hint,
+                             ParagraphDesc &para)
             {
                 // StringCharacterIterator iterates through the
                 // string by codepoint not code units
@@ -229,7 +229,7 @@ namespace ks
                 std::vector<uint> list_glyph_fonts;
                 list_glyph_fonts.reserve(para.num_codeunits);
 
-                if(text_hint.font_search == TextHint::FontSearch::Explicit)
+                if(text_hint.font_search == Hint::FontSearch::Explicit)
                 {
                     // If the FontSearch mode is Explicit, we only search
                     // the specified font and set a missing glyph if no
@@ -310,9 +310,11 @@ namespace ks
                             }
                         }
 
-                        // There's no valid font for this glyph
+                        // There's no valid font for this glyph so just
+                        // use anything thats available; it'll show up
+                        // as a missing glyph anyway
                         if(glyph_index == 0)
-                        {                           
+                        {
                             if(text_hint.list_prio_fonts.empty() == false)
                             {
                                 list_glyph_fonts.insert(
@@ -377,7 +379,7 @@ namespace ks
             }
 
 
-            void ItemizeScript(TextParagraph &para)
+            void ItemizeScript(ParagraphDesc &para)
             {
                 // getScriptStart/End return indices for the utf16text,
                 // buffer so they represent code units
@@ -399,7 +401,7 @@ namespace ks
 
             // =========================================================== //
 
-            void ItemizeDirection(TextParagraph &para,
+            void ItemizeDirection(ParagraphDesc &para,
                                   hb_direction_t const dirn_hint)
             {
                 // 0 sets overall to LTR
@@ -487,7 +489,7 @@ namespace ks
 
             // =========================================================== //
 
-            void MergeRuns(TextParagraph &para)
+            void MergeRuns(ParagraphDesc &para)
             {
                 // This method creates a TextRun for every run that shares
                 // the same font, script and direction so that the runs
@@ -604,14 +606,14 @@ namespace ks
             // =========================================================== //
 
             void ShapeLine(std::vector<unique_ptr<Font>> const &list_fonts,
-                           TextHint const &text_hint,
-                           TextParagraph &para,
+                           Hint const &text_hint,
+                           ParagraphDesc &para,
                            u32 const line_idx)
             {
                 (void)text_hint;
 
                 hb_buffer_t * hb_buff = hb_buffer_create();
-                TextLine &line = para.list_lines[line_idx];
+                ShapedLine &line = (*(para.list_lines))[line_idx];
                 line.list_glyph_info.clear();
                 line.list_glyph_offsets.clear();
 
@@ -702,7 +704,7 @@ namespace ks
 
             // =========================================================== //
 
-            void FindLineBreaks(TextParagraph& para)
+            void FindLineBreaks(ParagraphDesc& para)
             {
                 static bool init_libunibreak = false;
                 if(!init_libunibreak)
@@ -764,36 +766,52 @@ namespace ks
 
             // =========================================================== //
 
-            void CreateNewLine(TextParagraph& para,
+            void CreateNewLine(ParagraphDesc& para,
                                uint line_index,
                                uint break_index)
             {
                 // Break and reshape
-                TextLine& line = para.list_lines[line_index];
+                ShapedLine& line = (*(para.list_lines))[line_index];
 
-                TextLine line_next;
+                ShapedLine line_next;
                 line_next.start = break_index+1;
                 line_next.end = line.end;
                 line.end = line_next.start;
-                para.list_lines.push_back(line_next);
+                para.list_lines->push_back(line_next);
             }
         }
 
         // =========================================================== //
 
-        std::vector<TextLine>
-        ShapeText(std::string const &utf8text,
+        std::u16string ConvertStringUTF8ToUTF16(std::string const &utf8text)
+        {
+            icu::UnicodeString icu_string = icu::UnicodeString::fromUTF8(utf8text);
+            return std::u16string(
+                        reinterpret_cast<const char16_t*>(icu_string.getBuffer()),
+                        icu_string.length());
+        }
+
+        // =========================================================== //
+
+        unique_ptr<std::vector<ShapedLine>>
+        ShapeText(std::u16string const &utf16text,
                   std::vector<unique_ptr<Font>> const &list_fonts,
-                  TextHint const &text_hint,
+                  Hint const &text_hint,
                   uint const max_line_width_px)
         {
-            TextParagraph para;
-            para.utf16text = icu::UnicodeString::fromUTF8(utf8text);
+            icu::UnicodeString icu_string(
+                        true,
+                        reinterpret_cast<const UChar *>(utf16text.data()),
+                        utf16text.size());
+
+            ParagraphDesc para;
+            para.utf16text.fastCopyFrom(icu_string);
             para.num_codeunits = para.utf16text.length();
             para.num_codepoints = para.utf16text.countChar32();
+            para.list_lines = make_unique<std::vector<ShapedLine>>();
 
-            if(text_hint.direction != TextHint::Direction::Multiple &&
-               text_hint.script == TextHint::Script::Single)
+            if(text_hint.direction != Hint::Direction::Multiple &&
+               text_hint.script == Hint::Script::Single)
             {
                 // TODO: Short cut
                 // hb_buffer_set_direction
@@ -810,26 +828,25 @@ namespace ks
 
             // Add the initial line of text containing all
             // of the text to the paragraph
-            para.list_lines.push_back(TextLine());
-            para.list_lines.back().start = 0;
-            para.list_lines.back().end = para.num_codeunits;
+            para.list_lines->push_back(ShapedLine());
+            para.list_lines->back().start = 0;
+            para.list_lines->back().end = para.num_codeunits;
 
             // Shape the first line
             ShapeLine(list_fonts,text_hint,para,0);
 
             // Find all line breaks in the text
             FindLineBreaks(para);
-            PrintBreakData(para.list_break_data);
 
             // Get the advances for each cluster in the text
             std::vector<s32> list_cluster_adv(para.num_codeunits,0);
 
             {
                 std::vector<GlyphInfo> const &ls_glyph_info =
-                        para.list_lines.back().list_glyph_info;
+                        para.list_lines->back().list_glyph_info;
 
                 std::vector<GlyphOffset> const &ls_glyph_offsets =
-                        para.list_lines.back().list_glyph_offsets;
+                        para.list_lines->back().list_glyph_offsets;
 
                 for(size_t i=0; i < ls_glyph_info.size(); i++)
                 {
@@ -843,9 +860,9 @@ namespace ks
             // no longer possible)
             uint lk_break_cu=0;
 
-            for(uint i = 0; i < para.list_lines.size(); i++)
+            for(uint i = 0; i < para.list_lines->size(); i++)
             {
-                TextLine& line = para.list_lines.back();
+                ShapedLine& line = para.list_lines->back();
 
                 uint combined_adv = 0;
 
@@ -856,8 +873,8 @@ namespace ks
                     if(para.list_break_data[cu] == LINEBREAK_MUSTBREAK)
                     {
                         CreateNewLine(para,i,cu);
-                        ShapeLine(list_fonts,text_hint,para,para.list_lines.size()-2);
-                        ShapeLine(list_fonts,text_hint,para,para.list_lines.size()-1);
+                        ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-2);
+                        ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-1);
                         break;
                     }
                     else if(para.list_break_data[cu] == LINEBREAK_ALLOWBREAK)
@@ -872,15 +889,15 @@ namespace ks
                         if(lk_break_cu > line.start)
                         {
                             CreateNewLine(para,i,lk_break_cu);
-                            ShapeLine(list_fonts,text_hint,para,para.list_lines.size()-2);
-                            ShapeLine(list_fonts,text_hint,para,para.list_lines.size()-1);
+                            ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-2);
+                            ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-1);
                             break;
                         }
                     }
                 }
             }
 
-            return para.list_lines;
+            return std::move(para.list_lines);
         }
 
         // =========================================================== //

@@ -68,14 +68,14 @@ namespace ks
 
         void TextAtlas::GetGlyphs(std::vector<unique_ptr<Font>> const &list_fonts,
                                   std::vector<GlyphInfo> const &list_glyph_info,
-                                  std::vector<Glyph> &list_glyphs)
+                                  std::vector<GlyphImageDesc> &list_glyphs)
         {
             for(auto const &glyph_info : list_glyph_info)
             {
                 // Check for the zero-dimension glyphs first
                 if(glyph_info.zero_width)
                 {
-                    Glyph empty_glyph;
+                    GlyphImageDesc empty_glyph;
                     empty_glyph.index = glyph_info.index;
                     empty_glyph.width = 0;
                     empty_glyph.height = 0;
@@ -87,7 +87,7 @@ namespace ks
 
                     if(glyph_it == m_lkup_font_glyph_list[glyph_info.font].end())
                     {
-                        Glyph new_glyph;
+                        GlyphImageDesc new_glyph;
                         genGlyph(list_fonts,glyph_info,new_glyph);
 
                         list_glyphs.push_back(new_glyph);
@@ -117,7 +117,7 @@ namespace ks
 
         void TextAtlas::genGlyph(std::vector<unique_ptr<Font>> const &list_fonts,
                                  GlyphInfo const &glyph_info,
-                                 Glyph &glyph)
+                                 GlyphImageDesc &glyph)
         {
             if(glyph_info.font == 0) {
                 std::string desc = m_log_prefix;
@@ -176,7 +176,7 @@ namespace ks
                 // TODO not sure if this should be saved here
                 auto& list_glyphs = m_lkup_font_glyph_list[glyph_info.font];
 
-                std::vector<Glyph>::iterator glyph_it;
+                std::vector<GlyphImageDesc>::iterator glyph_it;
                 glyph_it = std::upper_bound(list_glyphs.begin(),
                                             list_glyphs.end(),
                                             glyph.index,
@@ -283,7 +283,7 @@ namespace ks
 
             auto& list_glyphs = m_lkup_font_glyph_list[glyph_info.font];
 
-            std::vector<Glyph>::iterator glyph_it;
+            std::vector<GlyphImageDesc>::iterator glyph_it;
             glyph_it = std::upper_bound(list_glyphs.begin(),
                                         list_glyphs.end(),
                                         glyph.index,
@@ -302,7 +302,7 @@ namespace ks
                             ConvertToImageDataPtr().release()));
         }
 
-        std::vector<Glyph>::iterator TextAtlas::findGlyph(uint font_index,
+        std::vector<GlyphImageDesc>::iterator TextAtlas::findGlyph(uint font_index,
                                                           uint glyph_index)
         {
             auto& list_glyphs =
@@ -488,14 +488,14 @@ namespace ks
                         m_atlas_size_px);
         }
 
-        bool TextAtlas::glyphIsLessThanLB(Glyph const &glyph,
+        bool TextAtlas::glyphIsLessThanLB(GlyphImageDesc const &glyph,
                                           u32 index)
         {
             return (glyph.index < index);
         }
 
         bool TextAtlas::glyphIsLessThanUB(u32 index,
-                                          Glyph const &glyph)
+                                          GlyphImageDesc const &glyph)
         {
             return (index < glyph.index);
         }

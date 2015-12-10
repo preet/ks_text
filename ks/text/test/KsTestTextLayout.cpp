@@ -49,7 +49,7 @@ namespace test
     };
 
     shared_ptr<draw::VertexBufferAllocator> vx_buff_allocator =
-            make_shared<draw::VertexBufferAllocator>(20*6*10);
+            make_shared<draw::VertexBufferAllocator>(24*6*256);
 
     // Buffer layout
     draw::BufferLayout const buffer_layout(
@@ -158,28 +158,25 @@ namespace test
                 m_text_hint =
                         m_text_manager->CreateHint(
                             font_name,
-                            text::TextHint::FontSearch::Fallback,
-                            text::TextHint::Direction::Multiple,
-                            text::TextHint::Script::Multiple);
+                            text::Hint::FontSearch::Fallback,
+                            text::Hint::Direction::Multiple,
+                            text::Hint::Script::Multiple);
 
-                std::vector<text::Glyph> list_glyphs;
-                std::vector<text::GlyphPosition> list_glyph_pos;
-
+//                std::vector<text::GlyphImageDesc> list_glyphs;
+//                std::vector<text::GlyphPosition> list_glyph_pos;
 //                m_text_manager->GetGlyphs("aa\nbدليل",
 //                                          m_text_hint,
 //                                          list_glyphs,
 //                                          list_glyph_pos);
 
-                m_text_manager->GetGlyphs("abc\n",
-                                          m_text_hint,
-                                          list_glyphs,
-                                          list_glyph_pos);
+                std::string s = "AaGgQq";
 
+                auto list_lines_ptr =
+                        m_text_manager->GetGlyphs(
+                            text::TextManager::ConvertStringUTF8ToUTF16(s),
+                            m_text_hint);
 
-
-                createGlyphs(list_glyphs,list_glyph_pos);
-
-
+                createGlyphs(*list_lines_ptr);
 
                 m_setup = true;
             }
@@ -262,8 +259,7 @@ namespace test
         }
 
 
-        void createGlyphs(std::vector<text::Glyph> const &list_glyphs,
-                          std::vector<text::GlyphPosition> const &list_glyph_pos)
+        void createGlyphs(std::vector<text::Line> const &list_lines)
         {
             // Remove any old entities if required
             if(m_entity_id == 0)
@@ -278,114 +274,105 @@ namespace test
             unique_ptr<std::vector<u8>> list_vx =
                     make_unique<std::vector<u8>>();
 
-            list_vx->reserve(6*sizeof(Vertex)*list_glyphs.size());
-
             // Just some scaling factors
             float const k_div_glyph = 1.0/(g_glyph_res_px*2.5);
             float const k_div_atlas = 1.0/g_atlas_res_px;
 
-            for(uint i=0; i < list_glyphs.size(); i++)
+            for(auto const &line : list_lines)
             {
-                auto const &glyph = list_glyphs[i];
-                auto const &glyph_pos = list_glyph_pos[i];
+                for(text::Glyph const &glyph : line.list_glyphs)
+                {
+                    // Original glyph dimensions (without any SDF
+                    // borders)
+                    uint const o_glyph_width = glyph.x1-glyph.x0;
+                    uint const o_glyph_height= glyph.y1-glyph.y0;
 
-                // No need to render glyphs that are just
-                // spacing characters
-                if((glyph.width == 0) || (glyph.height == 0)) {
-                    continue;
+                    if(o_glyph_width==0 || o_glyph_height==0)
+                    {
+                        continue;
+                    }
+
+                    uint const glyph_width = o_glyph_width + (2*glyph.sdf_x);
+                    uint const glyph_height= o_glyph_height + (2*glyph.sdf_y);
+
+                    float x0 = (glyph.x0-glyph.sdf_x)*k_div_glyph;
+                    float x1 = (glyph.x1+glyph.sdf_x)*k_div_glyph;
+                    float y0 = (glyph.y0-glyph.sdf_y)*k_div_glyph;
+                    float y1 = (glyph.y1+glyph.sdf_y)*k_div_glyph;
+
+                    float s0 = glyph.tex_x*k_div_atlas;
+                    float s1 = (glyph.tex_x+glyph_width)*k_div_atlas;
+
+                    // tex_y must be flipped
+                    float t1 = glyph.tex_y*k_div_atlas;
+                    float t0 = (glyph.tex_y+glyph_height)*k_div_atlas;
+
+                    x0 -= 0.9;
+                    x1 -= 0.9;
+                    y0 += 0.25;
+                    y1 += 0.25;
+
+                    glm::u8vec4 color{255,255,255,255};
+
+                    // BL
+                    gl::Buffer::PushElement<Vertex>(
+                                *list_vx,
+                                Vertex{
+                                    glm::vec3{x0,y1,0},
+                                    glm::vec2{s0,t1},
+                                    color
+                                });
+
+                    // TR
+                    gl::Buffer::PushElement<Vertex>(
+                                *list_vx,
+                                Vertex{
+                                    glm::vec3{x1,y0,0},
+                                    glm::vec2{s1,t0},
+                                    color
+                                });
+
+                    // TL
+                    gl::Buffer::PushElement<Vertex>(
+                                *list_vx,
+                                Vertex{
+                                    glm::vec3{x0,y0,0},
+                                    glm::vec2{s0,t0},
+                                    color
+                                });
+
+                    // BL
+                    gl::Buffer::PushElement<Vertex>(
+                                *list_vx,
+                                Vertex{
+                                    glm::vec3{x0,y1,0},
+                                    glm::vec2{s0,t1},
+                                    color
+                                });
+
+                    // BR
+                    gl::Buffer::PushElement<Vertex>(
+                                *list_vx,
+                                Vertex{
+                                    glm::vec3{x1,y1,0},
+                                    glm::vec2{s1,t1},
+                                    color
+                                });
+
+                    // TR
+                    gl::Buffer::PushElement<Vertex>(
+                                *list_vx,
+                                Vertex{
+                                    glm::vec3{x1,y0,0},
+                                    glm::vec2{s1,t0},
+                                    color
+                                });
                 }
-
-                uint glyph_width = glyph.width+(2*glyph.sdf_x);
-                uint glyph_height = glyph.height+(2*glyph.sdf_y);
-
-                float x0 = (glyph_pos.x0-glyph.sdf_x)*k_div_glyph;
-                float x1 = (glyph_pos.x1+glyph.sdf_x)*k_div_glyph;
-                float y0 = (glyph_pos.y0-glyph.sdf_y)*k_div_glyph;
-                float y1 = (glyph_pos.y1+glyph.sdf_y)*k_div_glyph;
-
-//                float ax0 = (glyph_pos.x0-glyph.sdf_x/2);
-//                float ax1 = (glyph_pos.x1+glyph.sdf_x/2);
-//                float ay0 = (glyph_pos.y0-glyph.sdf_y/2);
-//                float ay1 = (glyph_pos.y1+glyph.sdf_y/2);
-
-//                LOG.Trace() << "glyph sdf: " << glyph.sdf_x << "," << glyph.sdf_y;
-//                LOG.Trace() << "glyph w,h: " << glyph_pos.x1-glyph_pos.x0
-//                            << ", " << glyph_pos.y1-glyph_pos.y0;
-//                LOG.Trace() << "glyph ww,hh: " << glyph_width << ", " << glyph_height;
-//                LOG.Trace() << "glyph aw,ah: " << ax1-ax0 << ", " << ay1-ay0;
-
-                float s0 = glyph.tex_x*k_div_atlas;
-                float s1 = (glyph.tex_x+glyph_width)*k_div_atlas;
-
-                // tex_y must be flipped
-                float t1 = glyph.tex_y*k_div_atlas;
-                float t0 = (glyph.tex_y+glyph_height)*k_div_atlas;
-
-                x0 -= 0.9;
-                x1 -= 0.9;
-                y0 += 0.25;
-                y1 += 0.25;
-
-                glm::u8vec4 color{255,255,255,255};
-
-                // BL
-                gl::Buffer::PushElement<Vertex>(
-                            *list_vx,
-                            Vertex{
-                                glm::vec3{x0,y1,0},
-                                glm::vec2{s0,t1},
-                                color
-                            });
-
-                // TR
-                gl::Buffer::PushElement<Vertex>(
-                            *list_vx,
-                            Vertex{
-                                glm::vec3{x1,y0,0},
-                                glm::vec2{s1,t0},
-                                color
-                            });
-
-                // TL
-                gl::Buffer::PushElement<Vertex>(
-                            *list_vx,
-                            Vertex{
-                                glm::vec3{x0,y0,0},
-                                glm::vec2{s0,t0},
-                                color
-                            });
-
-                // BL
-                gl::Buffer::PushElement<Vertex>(
-                            *list_vx,
-                            Vertex{
-                                glm::vec3{x0,y1,0},
-                                glm::vec2{s0,t1},
-                                color
-                            });
-
-                // BR
-                gl::Buffer::PushElement<Vertex>(
-                            *list_vx,
-                            Vertex{
-                                glm::vec3{x1,y1,0},
-                                glm::vec2{s1,t1},
-                                color
-                            });
-
-                // TR
-                gl::Buffer::PushElement<Vertex>(
-                            *list_vx,
-                            Vertex{
-                                glm::vec3{x1,y0,0},
-                                glm::vec2{s1,t0},
-                                color
-                            });
             }
+
 
             // Create the render component
 
-            // FIXME
             auto depth_config_id =
                     m_scene->GetRenderSystem()->RegisterDepthConfig(
                         [](ks::gl::StateSet* state_set){
@@ -438,7 +425,7 @@ namespace test
         shared_ptr<Scene> m_scene;
 
         unique_ptr<text::TextManager> m_text_manager;
-        text::TextHint m_text_hint;
+        text::Hint m_text_hint;
 
         bool m_setup;
         Id m_draw_stage_id;

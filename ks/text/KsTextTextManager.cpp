@@ -17,6 +17,8 @@
 
 #include <iostream>
 #include <fstream>
+#include <locale>
+#include <codecvt>
 
 #include <ks/text/KsTextTextManager.hpp>
 #include <ks/text/KsTextFreeType.hpp>
@@ -68,7 +70,17 @@ namespace ks
             shared_ptr<FreeTypeContext> g_ft_context;
         }
 
+        // =========================================================== //
+
         FontFileInvalid::FontFileInvalid() :
+            ks::Exception(ks::Exception::ErrorLevel::ERROR,"")
+        {}
+
+        NoFontsAvailable::NoFontsAvailable() :
+            ks::Exception(ks::Exception::ErrorLevel::ERROR,"")
+        {}
+
+        HintInvalid::HintInvalid() :
             ks::Exception(ks::Exception::ErrorLevel::ERROR,"")
         {}
 
@@ -161,12 +173,17 @@ namespace ks
             m_text_atlas->AddFont(font);
         }
 
-        TextHint TextManager::CreateHint(std::string const &prio_fonts,
-                                         TextHint::FontSearch font_search_hint,
-                                         TextHint::Direction direction_hint,
-                                         TextHint::Script script_hint)
+        Hint TextManager::CreateHint(std::string const &prio_fonts,
+                                     Hint::FontSearch font_search_hint,
+                                     Hint::Direction direction_hint,
+                                     Hint::Script script_hint)
         {
-            TextHint hint;
+            if(m_list_fonts.empty())
+            {
+                throw NoFontsAvailable();
+            }
+
+            Hint hint;
 
             // Create two lists of font indices, one for
             // prio_fonts and one for fallbacks
@@ -223,137 +240,154 @@ namespace ks
             return hint;
         }
 
-        void TextManager::GetGlyphs(std::string const &utf8text,
-                                    TextHint const text_hint,
-                                    std::vector<Glyph>& list_all_glyphs,
-                                    std::vector<GlyphPosition>& list_all_glyph_pos)
+        namespace {
+
+            // Helper
+            template<typename T>
+            void OrderedUniqueInsert(std::vector<T>& list_data,T ins_data)
+            {
+                // lower bound == first value thats greater than or equal
+                auto it = std::lower_bound(list_data.begin(),
+                                           list_data.end(),
+                                           ins_data);
+
+                // insert when: it==end, *it != ins_data (ins_data is greater)
+                if((it==list_data.end()) || (*it != ins_data) ) {
+                    list_data.insert(it,ins_data);
+                }
+            }
+
+        }
+
+        unique_ptr<std::vector<Line>>
+        TextManager::GetGlyphs(std::u16string const &utf16text,
+                               Hint const &text_hint)
         {
+            if(text_hint.list_prio_fonts.empty() &&
+               text_hint.list_fallback_fonts.empty())
+            {
+                throw HintInvalid();
+            }
+
+            auto list_lines_ptr = make_unique<std::vector<Line>>();
+            if(utf16text.empty())
+            {
+                return list_lines_ptr;
+            }
+
+            uint const invalid_font_line_height =
+                    m_text_atlas->GetGlyphResolutionPx() +
+                    (m_text_atlas->GetGlyphResolutionPx()/5);
+
             // Shape with TextShaper
-            std::vector<TextLine> list_lines =
-                    ShapeText(utf8text,
-                              m_list_fonts,
-                              text_hint);
+            auto list_shaped_lines_ptr =
+                    ShapeText(utf16text,m_list_fonts,text_hint);
+
+            auto& list_shaped_lines = *list_shaped_lines_ptr;
 
             // Create and position glyhps on each line
-            uint line_spacing = 0;
-            uint max_line_width = 0;
-            uint total_glyph_count = 0;
-            uint const line_count = list_lines.size();
-            std::vector<TextLineData> list_line_data(line_count);
+            list_lines_ptr->resize(list_shaped_lines.size());
+            auto& list_lines = *list_lines_ptr;
 
-            for(uint i=0; i < line_count; i++)
+            // For each line
+            for(uint i=0; i < list_shaped_lines.size(); i++)
             {
-                TextLine const &line = list_lines[i];
-                TextLineData &line_data = list_line_data[i];
+                ShapedLine const &shaped_line = list_shaped_lines[i];
+                Line &line = list_lines[i];
+
+                // TODO add start and end of each line
+                line.start = shaped_line.start;
+                line.end = shaped_line.end;
+
+                uint const glyph_count =
+                        shaped_line.list_glyph_info.size();
+
+                std::vector<GlyphImageDesc> list_glyph_imgs;
+
 
                 // Build/Rasterize the glyphs with TextAtlas
-                m_text_atlas->GetGlyphs(m_list_fonts,
-                                        line.list_glyph_info,
-                                        line_data.list_glyphs);
+                m_text_atlas->GetGlyphs(
+                            m_list_fonts,
+                            shaped_line.list_glyph_info,
+                            list_glyph_imgs);
 
-                total_glyph_count += line_data.list_glyphs.size();
-
-                // Set glyph positions on a (0,0) baseline
+                // Set glyph positions on a (0,0) baseline.
                 // (x0,y0) for a glyph is the bottom-left
                 sint x = 0;
                 sint y = 0;
 
-                uint const glyph_count = line_data.list_glyphs.size();
-                line_data.list_glyph_pos.reserve(glyph_count);
-                line_data.x_min = std::numeric_limits<sint>::max();
-                line_data.x_max = std::numeric_limits<sint>::min();
-                line_data.y_min = std::numeric_limits<sint>::max();
-                line_data.y_max = std::numeric_limits<sint>::min();
+                line.x_min = std::numeric_limits<sint>::max();
+                line.x_max = std::numeric_limits<sint>::min();
+                line.y_min = std::numeric_limits<sint>::max();
+                line.y_max = std::numeric_limits<sint>::min();
 
+                line.list_glyphs.resize(glyph_count);
+
+                std::vector<uint> list_unq_fonts;
+
+                // For each glyph
                 for(uint j=0; j < glyph_count; j++)
                 {
-                    Glyph const &glyph =
-                            line_data.list_glyphs[j];
+                    GlyphImageDesc const &glyph_img =
+                            list_glyph_imgs[j];
 
                     GlyphOffset const &glyph_offset =
-                            line.list_glyph_offsets[j];
+                            shaped_line.list_glyph_offsets[j];
 
-                    GlyphPosition glyph_pos;
-                    glyph_pos.x0 = x + glyph_offset.offset_x + glyph.bearing_x;
-                    glyph_pos.x1 = glyph_pos.x0 + glyph.width;
-                    glyph_pos.y1 = y + glyph_offset.offset_y + glyph.bearing_y;
-                    glyph_pos.y0 = glyph_pos.y1 - glyph.height;
-                    line_data.list_glyph_pos.push_back(glyph_pos);
+                    Glyph& glyph = line.list_glyphs[j];
+
+                    glyph.cluster = shaped_line.list_glyph_info[j].cluster;
+
+                    glyph.atlas = glyph_img.atlas;
+                    glyph.tex_x = glyph_img.tex_x;
+                    glyph.tex_y = glyph_img.tex_y;
+                    glyph.sdf_x = glyph_img.sdf_x;
+                    glyph.sdf_y = glyph_img.sdf_y;
+
+                    glyph.x0 = x + glyph_offset.offset_x + glyph_img.bearing_x;
+                    glyph.x1 = glyph.x0 + glyph_img.width;
+                    glyph.y1 = y + glyph_offset.offset_y + glyph_img.bearing_y;
+                    glyph.y0 = glyph.y1 - glyph_img.height;
 
                     x += glyph_offset.advance_x;
                     y += glyph_offset.advance_y;
 
                     // update min,max x,y
-                    line_data.x_min = std::min(line_data.x_min,glyph_pos.x0);
-                    line_data.x_max = std::max(line_data.x_max,glyph_pos.x1);
+                    line.x_min = std::min(line.x_min,glyph.x0);
+                    line.x_max = std::max(line.x_max,glyph.x1);
+                    line.y_min = std::min(line.y_min,glyph.y0);
+                    line.y_max = std::max(line.y_max,glyph.y1);
 
-                    line_data.y_min = std::min(line_data.y_min,glyph_pos.y0);
-                    line_data.y_max = std::max(line_data.y_max,glyph_pos.y1);
+                    // update unique font list
+                    OrderedUniqueInsert<uint>(list_unq_fonts,glyph_img.font);
                 }
-                // Calc line width, height and spacing
-                line_data.width  = line_data.x_max-line_data.x_min;
-                line_data.height = line_data.y_max-line_data.y_min;
-                line_spacing = std::max(line_spacing,line_data.height);
-                max_line_width = std::max(max_line_width,line_data.width);
-            }
 
-//            // buff line spacing
-//            line_spacing += (line_spacing/5);
-
-//            // clamp line spacing if requried
-//            if(line_spacing > (2*m_k_glyph_world_px)) {
-//                line_spacing = 2*m_k_glyph_world_px;
-//            }
-
-            // Set baseline origin x based on alignment
-            // Set baseline origin y based on line_spacing
-            for(uint i=0; i < list_line_data.size(); i++)
-            {
-                TextLineData &line_data = list_line_data[i];
-                uint const glyph_count = line_data.list_glyphs.size();
-
-                sint adj_x=0;
-//                if(alignment == TEXT_ALIGN_CENTER) {
-//                    adj_x = (max_line_width-line_data.width)/2;
-//                }
-//                else if(alignment == TEXT_ALIGN_RIGHT) {
-//                    adj_x = max_line_width-line_data.width;
-//                }
-
-                for(uint j=0; j < glyph_count; j++)
+                // Calculate the line spacing
+                line.spacing = 0;
+                for(auto font : list_unq_fonts)
                 {
-                    GlyphPosition &glyph_pos = line_data.list_glyph_pos[j];
-                    glyph_pos.x0 += adj_x;
-                    glyph_pos.x1 += adj_x;
-                    glyph_pos.y0 -= (line_spacing*i);
-                    glyph_pos.y1 -= (line_spacing*i);
+                    // Fix the invalid font height
+                    if(font == 0)
+                    {
+                        line.spacing = std::max(line.spacing,invalid_font_line_height);
+                    }
+                    else
+                    {
+                        auto const &ft_size_metrics =
+                                m_list_fonts[font]->ft_face->size->metrics;
+
+                        uint font_line_height = ft_size_metrics.height/64;
+                        line.spacing = std::max(line.spacing,font_line_height);
+                    }
                 }
             }
 
-            // Save
-            list_all_glyphs.clear();
-            list_all_glyphs.reserve(total_glyph_count);
+            return list_lines_ptr;
+        }
 
-            list_all_glyph_pos.clear();
-            list_all_glyph_pos.reserve(total_glyph_count);
-
-            for(uint i=0; i < list_line_data.size(); i++)
-            {
-                std::vector<Glyph> const &list_glyphs =
-                        list_line_data[i].list_glyphs;
-
-                std::vector<GlyphPosition> const &list_glyph_pos =
-                        list_line_data[i].list_glyph_pos;
-
-                list_all_glyphs.insert(list_all_glyphs.end(),
-                                       list_glyphs.begin(),
-                                       list_glyphs.end());
-
-                list_all_glyph_pos.insert(list_all_glyph_pos.end(),
-                                          list_glyph_pos.begin(),
-                                          list_glyph_pos.end());
-            }
-
+        std::u16string TextManager::ConvertStringUTF8ToUTF16(std::string const &utf8text)
+        {
+            return text::ConvertStringUTF8ToUTF16(utf8text);
         }
 
         void TextManager::cleanUpFonts()
@@ -494,6 +528,5 @@ namespace ks
 
             return file_data;
         }
-
     }
 }
