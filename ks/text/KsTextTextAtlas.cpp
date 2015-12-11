@@ -76,9 +76,21 @@ namespace ks
                 if(glyph_info.zero_width)
                 {
                     GlyphImageDesc empty_glyph;
+                    empty_glyph.font  = glyph_info.font;
                     empty_glyph.index = glyph_info.index;
-                    empty_glyph.width = 0;
-                    empty_glyph.height = 0;
+                    empty_glyph.atlas = 0;
+                    // (texture)
+                    empty_glyph.tex_x = 0;
+                    empty_glyph.tex_y = 0;
+                    // (sdf)
+                    empty_glyph.sdf_x = 0;
+                    empty_glyph.sdf_y = 0;
+                    // (metrics)
+                    empty_glyph.bearing_x = 0;
+                    empty_glyph.bearing_y = 0;
+                    empty_glyph.width     = 0;
+                    empty_glyph.height    = 0;
+
                     list_glyphs.push_back(empty_glyph);
                 }
                 else
