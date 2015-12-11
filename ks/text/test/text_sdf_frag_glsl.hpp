@@ -55,8 +55,8 @@ void main(void)
     // (distf > 0.5): moving away from the edge inwards
     float distf = texture2D(u_s_tex0, v_v2_tex0).r;
 
-    float glyph_center = 0.5;
-    float glyph_fuzz = 0.02;
+    float glyph_center = 0.50;
+    float glyph_fuzz = 0.025;
     vec4 color = v_v4_color;
 
     // NOTE glyph_fuzz should be scaled wrt how
@@ -72,6 +72,7 @@ void main(void)
 
     gl_FragColor = color;
 
+//    // Debug
 //    vec4 color = v_v4_color*texture2D(u_s_tex0,v_v2_tex0).r;
 //    color.a = 1.0;
 //    gl_FragColor = color;

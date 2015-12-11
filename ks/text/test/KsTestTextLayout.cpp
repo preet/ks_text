@@ -14,6 +14,8 @@
    limitations under the License.
 */
 
+#include <ks/gl/KsGLCamera.hpp>
+
 #include <ks/gui/KsGuiWindow.hpp>
 #include <ks/gui/KsGuiApplication.hpp>
 #include <ks/platform/KsPlatformMain.hpp>
@@ -25,6 +27,7 @@
 
 #include <glm/gtx/transform.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 #include <ks/text/test/text_sdf_vert_glsl.hpp>
 #include <ks/text/test/text_sdf_frag_glsl.hpp>
@@ -37,19 +40,19 @@ namespace test
     using AttrType = gl::VertexBuffer::Attribute::Type;
 
     struct Vertex {
-        glm::vec3 a_v3_position; // 12
+        glm::vec4 a_v4_position; // 16
         glm::vec2 a_v2_tex0; // 8
         glm::u8vec4 a_v4_color; // 4
-    }; // sizeof == 24
+    }; // sizeof == 28
 
     gl::VertexLayout const vx_layout {
-        { "a_v4_position", AttrType::Float, 3, false },
+        { "a_v4_position", AttrType::Float, 4, false },
         { "a_v2_tex0", AttrType::Float, 2, false },
         { "a_v4_color", AttrType::UByte, 4, true }
     };
 
     shared_ptr<draw::VertexBufferAllocator> vx_buff_allocator =
-            make_shared<draw::VertexBufferAllocator>(24*6*256);
+            make_shared<draw::VertexBufferAllocator>(28*6*256);
 
     // Buffer layout
     draw::BufferLayout const buffer_layout(
@@ -58,8 +61,8 @@ namespace test
             { vx_buff_allocator });
 
     uint const g_atlas_res_px=1024;
-    uint const g_glyph_res_px=64;
-    uint const g_sdf_res_px=8;
+    uint const g_glyph_res_px=24;
+    uint const g_sdf_res_px=4;
 
     // ============================================================= //
 
@@ -76,12 +79,11 @@ namespace test
             m_scene(scene),
             m_setup(false),
             m_draw_stage_id(0),
-            m_shader_id(0),
-            m_entity_id(0)
+            m_shader_id(0)
         {
             static_assert(
-                        sizeof(Vertex)==24,
-                        "size of Vertex != 24");
+                        sizeof(Vertex)==28,
+                        "size of Vertex != 28");
 
             m_text_manager =
                     make_unique<text::TextManager>(
@@ -127,7 +129,36 @@ namespace test
         {
             if(!m_setup)
             {
+                // Camera
+                auto window = m_scene->GetWindow();
+                if(!window)
+                {
+                    LOG.Trace() << "TestTextLayout: Invalid window!";
+                    std::abort();
+                }
+
+                auto const width_px = window->size.Get().first;
+                auto const height_px = window->size.Get().second;
+
+                m_camera.SetViewMatrixAsLookAt(
+                            glm::vec3(0,0,0),
+                            glm::vec3(0,0,-1),
+                            glm::vec3(0,1,0));
+
+                m_camera.SetProjMatrixAsOrtho(
+                            0,               // left
+                            width_px,        // right
+                            height_px,       // bottom
+                            0,               // top
+                            -100,            // near (relative to camera eye)
+                            100              // far (relative to camera eye)
+                            );
+
+                LOG.Trace() << "w " << width_px << ", h " << height_px;
+
+                // Render setup
                 auto render_system = m_scene->GetRenderSystem();
+                render_system->ShowDebugText(false);
 
                 // Add a draw stage
                 m_draw_stage_id =
@@ -141,19 +172,35 @@ namespace test
                             text_sdf_vert_glsl,
                             text_sdf_frag_glsl);
 
-                // Text
-//                std::string font_name = "LindenHill.otf";
-//                std::string font_path = "/home/preet/Dev/";
+                // Add Raster configs
+                m_depth_config_id =
+                        m_scene->GetRenderSystem()->RegisterDepthConfig(
+                            [](ks::gl::StateSet* state_set){
+                                state_set->SetDepthTest(GL_TRUE);
+                                state_set->SetDepthMask(GL_FALSE);
+                            });
 
+                m_blend_config_id =
+                        m_scene->GetRenderSystem()->RegisterBlendConfig(
+                            [](ks::gl::StateSet* state_set){
+                                state_set->SetBlend(GL_TRUE);
+                                state_set->SetBlendFunction(
+                                    GL_SRC_ALPHA,
+                                    GL_ONE_MINUS_SRC_ALPHA,
+                                    GL_SRC_ALPHA,
+                                    GL_ONE_MINUS_SRC_ALPHA);
+                            });
+
+                // Add Text
+                m_baseline_x = g_sdf_res_px*2;
+
+//                std::string font_name = "LindenHill.otf";
                 std::string font_name = "FiraSans-Regular.ttf";
                 std::string font_path = "/home/preet/Dev/";
 
-
-                font_path += font_name;
-
                 m_text_manager->AddFont(
                             font_name,
-                            font_path);
+                            font_path+font_name);
 
                 m_text_hint =
                         m_text_manager->CreateHint(
@@ -162,21 +209,154 @@ namespace test
                             text::Hint::Direction::Multiple,
                             text::Hint::Script::Multiple);
 
-//                std::vector<text::GlyphImageDesc> list_glyphs;
-//                std::vector<text::GlyphPosition> list_glyph_pos;
-//                m_text_manager->GetGlyphs("aa\nbدليل",
-//                                          m_text_hint,
-//                                          list_glyphs,
-//                                          list_glyph_pos);
 
-                std::string s = "AaGgQq";
+                std::string s;
+
+
+                // Single line of text
+                s = u8"This text shows a single line";
 
                 auto list_lines_ptr =
                         m_text_manager->GetGlyphs(
                             text::TextManager::ConvertStringUTF8ToUTF16(s),
                             m_text_hint);
 
-                createGlyphs(*list_lines_ptr);
+                createTextRenderData(*list_lines_ptr,glm::u8vec4{200,200,200,255});
+
+                auto const spacing = list_lines_ptr->at(0).spacing;
+                m_baseline_y += spacing;
+
+
+                // Multiple lines broken with control characters
+                s = u8"This text shows multiple lines\n"
+                      "using control characters\n"
+                      "like LF to break";
+
+                list_lines_ptr =
+                        m_text_manager->GetGlyphs(
+                            text::TextManager::ConvertStringUTF8ToUTF16(s),
+                            m_text_hint);
+
+                createTextRenderData(*list_lines_ptr,glm::u8vec4{194,250,211,255});
+                m_baseline_y += spacing;
+
+
+                // Multiple lines broken through width limit
+                s = u8"This text shows multiple lines that break "
+                      "automatically when a maximum line width is specified";
+
+                list_lines_ptr =
+                        m_text_manager->GetGlyphs(
+                            text::TextManager::ConvertStringUTF8ToUTF16(s),
+                            m_text_hint,
+                            width_px);
+
+                createTextRenderData(*list_lines_ptr,glm::u8vec4{194,247,250,255});
+                m_baseline_y += spacing;
+
+                // Missing glyphs
+                s = u8"This text shows missing glyphs ";
+                s += 0xe2;
+                s += 0x98;
+                s += 0xa0; // skull
+                s += 0xf0;
+                s += 0x9f;
+                s += 0x8d;
+                s += 0x95; // pizza
+
+                list_lines_ptr =
+                        m_text_manager->GetGlyphs(
+                            text::TextManager::ConvertStringUTF8ToUTF16(s),
+                            m_text_hint);
+
+                createTextRenderData(*list_lines_ptr,glm::u8vec4{250,225,194,255});
+                m_baseline_y += spacing;
+
+
+                // Fallback fonts
+                std::string font_name_d = "NotoSansDevanagari-Regular.ttf";
+
+                m_text_manager->AddFont(
+                            font_name_d,
+                            font_path+font_name_d);
+
+                std::string fallback_list;
+                fallback_list += font_name;
+                fallback_list += ",";
+                fallback_list += font_name_d;
+
+                m_text_hint =
+                        m_text_manager->CreateHint(
+                            fallback_list,
+                            text::Hint::FontSearch::Fallback,
+                            text::Hint::Direction::Multiple,
+                            text::Hint::Script::Multiple);
+
+                s = u8"This text shows font fallback (FiraSans then NotoSans-Devanagari) "
+                    "\u0905\u0928\u0941\u091a\u094d\u091b\u0947\u0926 \u0031 \u2014 "
+                    "\u0938\u092d\u0940 \u092e\u0928\u0941\u0937\u094d\u092f\u094b\u0902 "
+                    "\u0915\u094b \u0917\u094c\u0930\u0935 \u0914\u0930 "
+                    "\u0905\u0927\u093f\u0915\u093e\u0930\u094b\u0902 \u0915\u0947 "
+                    "\u0935\u093f\u0937\u092f \u092e\u0947\u0902 "
+                    "\u091c\u0928\u094d\u092e\u091c\u093e\u0924 "
+                    "\u0938\u094d\u0935\u0924\u0928\u094d\u0924\u094d\u0930\u0924\u093e "
+                    "\u0914\u0930 \u0938\u092e\u093e\u0928\u0924\u093e "
+                    "\u092a\u094d\u0930\u093e\u092a\u094d\u0924 \u0939\u0948\u0902\u0964 "
+                    "\u0909\u0928\u094d\u0939\u0947\u0902 \u092c\u0941\u0926\u094d\u0927\u093f "
+                    "\u0914\u0930 \u0905\u0928\u094d\u0924\u0930\u093e\u0924\u094d\u092e\u093e "
+                    "\u0915\u0940 \u0926\u0947\u0928 \u092a\u094d\u0930\u093e\u092a\u094d\u0924 "
+                    "\u0939\u0948 \u0914\u0930 \u092a\u0930\u0938\u094d\u092a\u0930 "
+                    "\u0909\u0928\u094d\u0939\u0947\u0902 \u092d\u093e\u0908\u091a\u093e\u0930\u0947 "
+                    "\u0915\u0947 \u092d\u093e\u0935 \u0938\u0947 \u092c\u0930\u094d\u0924\u093e\u0935 "
+                    "\u0915\u0930\u0928\u093e \u091a\u093e\u0939\u093f\u090f\u0964";
+
+                list_lines_ptr =
+                        m_text_manager->GetGlyphs(
+                            text::TextManager::ConvertStringUTF8ToUTF16(s),
+                            m_text_hint,
+                            width_px);
+
+                createTextRenderData(*list_lines_ptr,glm::u8vec4{223,194,250,255});
+                m_baseline_y += spacing;
+
+
+                // Bidirectional text
+                std::string font_name_a = "NotoNaskhArabic-Regular.ttf";
+
+                m_text_manager->AddFont(
+                            font_name_a,
+                            font_path+font_name_a);
+
+                fallback_list = font_name;
+                fallback_list += ",";
+                fallback_list += font_name_a;
+
+                m_text_hint =
+                        m_text_manager->CreateHint(
+                            fallback_list,
+                            text::Hint::FontSearch::Fallback,
+                            text::Hint::Direction::Multiple,
+                            text::Hint::Script::Multiple);
+
+                s = u8"This text shows bidirectional support by mixing Arabic "
+                    "(\u0627\u0644\u0639\u0631\u0628\u064a\u0629) and English. "
+                    "One Thousand and One Nights "
+                    "(\u0643\u0650\u062a\u064e\u0627\u0628"
+                    "\u0623\u064e\u0644\u0652\u0641 \u0644\u064e\u064a\u0652\u0644\u064e\u0629 "
+                    "\u0648\u064e\u0644\u064e\u064a\u0652\u0644\u064e\u0629) "
+                    "and Sinbad the Sailor (\u0627\u0644\u0633\u0646\u062f\u0628\u0627\u062f "
+                    "\u0627\u0644\u0628\u062d\u0631\u064a) are well known examples of Arabic literature";
+
+                list_lines_ptr =
+                        m_text_manager->GetGlyphs(
+                            text::TextManager::ConvertStringUTF8ToUTF16(s),
+                            m_text_hint,
+                            width_px);
+
+                createTextRenderData(*list_lines_ptr,glm::u8vec4{248,180,180,255});
+                m_baseline_y += spacing;
+
+
 
                 m_setup = true;
             }
@@ -259,27 +439,24 @@ namespace test
         }
 
 
-        void createGlyphs(std::vector<text::Line> const &list_lines)
+        void createTextRenderData(std::vector<text::Line> const &list_lines,
+                                  glm::u8vec4 color)
         {
-            // Remove any old entities if required
-            if(m_entity_id == 0)
-            {
-                m_scene->RemoveEntity(m_entity_id);
-            }
-
-            m_entity_id = m_scene->CreateEntity();
-
-
             // Build geometry
             unique_ptr<std::vector<u8>> list_vx =
                     make_unique<std::vector<u8>>();
 
-            // Just some scaling factors
-            float const k_div_glyph = 1.0/(g_glyph_res_px*2.5);
+            // Texture scaling factor
             float const k_div_atlas = 1.0/g_atlas_res_px;
+
+            auto const m4_pv =
+                    m_camera.GetProjMatrix()*
+                    m_camera.GetViewMatrix();
 
             for(auto const &line : list_lines)
             {
+                m_baseline_y += line.spacing;
+
                 for(text::Glyph const &glyph : line.list_glyphs)
                 {
                     // Original glyph dimensions (without any SDF
@@ -295,30 +472,23 @@ namespace test
                     uint const glyph_width = o_glyph_width + (2*glyph.sdf_x);
                     uint const glyph_height= o_glyph_height + (2*glyph.sdf_y);
 
-                    float x0 = (glyph.x0-glyph.sdf_x)*k_div_glyph;
-                    float x1 = (glyph.x1+glyph.sdf_x)*k_div_glyph;
-                    float y0 = (glyph.y0-glyph.sdf_y)*k_div_glyph;
-                    float y1 = (glyph.y1+glyph.sdf_y)*k_div_glyph;
+                    float x0 = (glyph.x0-glyph.sdf_x);
+                    float x1 = (glyph.x1+glyph.sdf_x);
+                    float y0 = m_baseline_y-(glyph.y0-glyph.sdf_y);
+                    float y1 = m_baseline_y-(glyph.y1+glyph.sdf_y);
 
                     float s0 = glyph.tex_x*k_div_atlas;
                     float s1 = (glyph.tex_x+glyph_width)*k_div_atlas;
 
                     // tex_y must be flipped
-                    float t1 = glyph.tex_y*k_div_atlas;
-                    float t0 = (glyph.tex_y+glyph_height)*k_div_atlas;
-
-                    x0 -= 0.9;
-                    x1 -= 0.9;
-                    y0 += 0.25;
-                    y1 += 0.25;
-
-                    glm::u8vec4 color{255,255,255,255};
+                    float t0 = glyph.tex_y*k_div_atlas;
+                    float t1 = (glyph.tex_y+glyph_height)*k_div_atlas;
 
                     // BL
                     gl::Buffer::PushElement<Vertex>(
                                 *list_vx,
                                 Vertex{
-                                    glm::vec3{x0,y1,0},
+                                    m4_pv*glm::vec4{x0,y0,0,1},
                                     glm::vec2{s0,t1},
                                     color
                                 });
@@ -327,7 +497,7 @@ namespace test
                     gl::Buffer::PushElement<Vertex>(
                                 *list_vx,
                                 Vertex{
-                                    glm::vec3{x1,y0,0},
+                                    m4_pv*glm::vec4{x1,y1,0,1},
                                     glm::vec2{s1,t0},
                                     color
                                 });
@@ -336,7 +506,7 @@ namespace test
                     gl::Buffer::PushElement<Vertex>(
                                 *list_vx,
                                 Vertex{
-                                    glm::vec3{x0,y0,0},
+                                    m4_pv*glm::vec4{x0,y1,0,1},
                                     glm::vec2{s0,t0},
                                     color
                                 });
@@ -345,7 +515,7 @@ namespace test
                     gl::Buffer::PushElement<Vertex>(
                                 *list_vx,
                                 Vertex{
-                                    glm::vec3{x0,y1,0},
+                                    m4_pv*glm::vec4{x0,y0,0,1},
                                     glm::vec2{s0,t1},
                                     color
                                 });
@@ -354,7 +524,7 @@ namespace test
                     gl::Buffer::PushElement<Vertex>(
                                 *list_vx,
                                 Vertex{
-                                    glm::vec3{x1,y1,0},
+                                    m4_pv*glm::vec4{x1,y0,0,1},
                                     glm::vec2{s1,t1},
                                     color
                                 });
@@ -363,42 +533,24 @@ namespace test
                     gl::Buffer::PushElement<Vertex>(
                                 *list_vx,
                                 Vertex{
-                                    glm::vec3{x1,y0,0},
+                                    m4_pv*glm::vec4{x1,y1,0,1},
                                     glm::vec2{s1,t0},
                                     color
                                 });
                 }
             }
 
+            // Create the entity
+            auto entity_id = m_scene->CreateEntity();
 
             // Create the render component
-
-            auto depth_config_id =
-                    m_scene->GetRenderSystem()->RegisterDepthConfig(
-                        [](ks::gl::StateSet* state_set){
-                            state_set->SetDepthTest(GL_TRUE);
-                            state_set->SetDepthMask(GL_FALSE);
-                        });
-
-            auto blend_config_id =
-                    m_scene->GetRenderSystem()->RegisterBlendConfig(
-                        [](ks::gl::StateSet* state_set){
-                            state_set->SetBlend(GL_TRUE);
-                            state_set->SetBlendFunction(
-                                GL_SRC_ALPHA,
-                                GL_ONE_MINUS_SRC_ALPHA,
-                                GL_SRC_ALPHA,
-                                GL_ONE_MINUS_SRC_ALPHA);
-                        });
-
-
             draw::DefaultDrawKey draw_key;
             draw_key.SetShader(m_shader_id);
             draw_key.SetPrimitive(gl::Primitive::Triangles);
             draw_key.SetTextureSet(m_list_atlas_data[0].texture_set_id);
             draw_key.SetUniformSet(m_list_atlas_data[0].uniform_set_id);
-            draw_key.SetBlendConfig(blend_config_id);
-            draw_key.SetDepthConfig(depth_config_id);
+            draw_key.SetBlendConfig(m_blend_config_id);
+            draw_key.SetDepthConfig(m_depth_config_id);
 
             std::vector<u8> list_draw_stages = {u8(m_draw_stage_id)};
 
@@ -408,7 +560,7 @@ namespace test
 
             auto& render_data =
                     cmlist_render_data_ptr->Create(
-                        m_entity_id,
+                        entity_id,
                         draw_key,
                         &buffer_layout,
                         nullptr,
@@ -420,17 +572,20 @@ namespace test
             geometry.SetVertexBufferUpdated(0);
         }
 
-
-
         shared_ptr<Scene> m_scene;
+        ks::gl::Camera<float> m_camera;
 
         unique_ptr<text::TextManager> m_text_manager;
         text::Hint m_text_hint;
 
+        float m_baseline_x;
+        float m_baseline_y;
+
         bool m_setup;
         Id m_draw_stage_id;
         Id m_shader_id;
-        Id m_entity_id;
+        Id m_depth_config_id;
+        Id m_blend_config_id;
 
         std::vector<TextAtlasData> m_list_atlas_data;
     };
@@ -465,7 +620,7 @@ int main(int argc, char* argv[])
     gui::Window::Attributes win_attribs;
     gui::Window::Properties win_props;
     win_props.width = 600;
-    win_props.height = 600;
+    win_props.height = 800;
 
     shared_ptr<gui::Window> window =
             app->CreateWindow(
