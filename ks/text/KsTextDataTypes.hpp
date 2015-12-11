@@ -76,7 +76,7 @@ namespace ks
             s32 x0;
             s32 y0;
             s32 x1; // x1 is to the right of x0
-            s32 y1; // y1 is below y0
+            s32 y1; // y1 is above y0
         };
 
         // =========================================================== //
