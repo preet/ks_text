@@ -144,15 +144,6 @@ namespace ks
             s16 advance_x;
             s16 advance_y;
         };
-
-        // TODO remove
-        struct GlyphPosition
-        {
-            s32 x0;
-            s32 y0;
-            s32 x1; // x1 is to the right of x0
-            s32 y1; // y1 is below y0
-        };
     }
 }
 
