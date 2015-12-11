@@ -72,20 +72,6 @@ namespace ks
 
         class TextManager
         {
-            struct TextLineData
-            {
-                uint height;
-                uint width;
-
-                sint x_min;
-                sint x_max;
-                sint y_min; // equivalent to descent
-                sint y_max; // equivalent to ascent
-
-                std::vector<GlyphImageDesc> list_glyphs;
-                std::vector<GlyphPosition> list_glyph_pos;
-            };
-
             static const std::string m_log_prefix;
 
             // text_atlas is up here to avoid warnings about
@@ -119,9 +105,11 @@ namespace ks
 
             unique_ptr<std::vector<Line>>
             GetGlyphs(std::u16string const &utf16text,
-                      Hint const &text_hint);
+                      Hint const &text_hint,
+                      uint const max_line_width_px=std::numeric_limits<uint>::max());
 
-            static std::u16string ConvertStringUTF8ToUTF16(std::string const &utf8text);
+            static std::u16string
+            ConvertStringUTF8ToUTF16(std::string const &utf8text);
 
 
             // uint: atlas index

@@ -261,7 +261,8 @@ namespace ks
 
         unique_ptr<std::vector<Line>>
         TextManager::GetGlyphs(std::u16string const &utf16text,
-                               Hint const &text_hint)
+                               Hint const &text_hint,
+                               uint const max_line_width_px)
         {
             if(text_hint.list_prio_fonts.empty() &&
                text_hint.list_fallback_fonts.empty())
@@ -281,7 +282,10 @@ namespace ks
 
             // Shape with TextShaper
             auto list_shaped_lines_ptr =
-                    ShapeText(utf16text,m_list_fonts,text_hint);
+                    ShapeText(utf16text,
+                              m_list_fonts,
+                              text_hint,
+                              max_line_width_px);
 
             auto& list_shaped_lines = *list_shaped_lines_ptr;
 
@@ -313,8 +317,7 @@ namespace ks
 
                 // Set glyph positions on a (0,0) baseline.
                 // (x0,y0) for a glyph is the bottom-left
-                sint x = 0;
-                sint y = 0;
+                sint pen_x = 0;
 
                 line.x_min = std::numeric_limits<sint>::max();
                 line.x_max = std::numeric_limits<sint>::min();
@@ -344,13 +347,12 @@ namespace ks
                     glyph.sdf_x = glyph_img.sdf_x;
                     glyph.sdf_y = glyph_img.sdf_y;
 
-                    glyph.x0 = x + glyph_offset.offset_x + glyph_img.bearing_x;
+                    glyph.x0 = pen_x + glyph_offset.offset_x + glyph_img.bearing_x;
                     glyph.x1 = glyph.x0 + glyph_img.width;
-                    glyph.y1 = y + glyph_offset.offset_y + glyph_img.bearing_y;
+                    glyph.y1 = glyph_offset.offset_y + glyph_img.bearing_y;
                     glyph.y0 = glyph.y1 - glyph_img.height;
 
-                    x += glyph_offset.advance_x;
-                    y += glyph_offset.advance_y;
+                    pen_x += glyph_offset.advance_x;
 
                     // update min,max x,y
                     line.x_min = std::min(line.x_min,glyph.x0);
