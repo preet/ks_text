@@ -173,10 +173,7 @@ namespace ks
             m_text_atlas->AddFont(font);
         }
 
-        Hint TextManager::CreateHint(std::string const &prio_fonts,
-                                     Hint::FontSearch font_search_hint,
-                                     Hint::Direction direction_hint,
-                                     Hint::Script script_hint)
+        Hint TextManager::CreateHint(std::string const &prio_fonts)
         {
             if(m_list_fonts.empty())
             {
@@ -231,12 +228,6 @@ namespace ks
                 i++;
             }
 
-            hint.font_search = font_search_hint;
-            hint.direction = direction_hint;
-            hint.script = script_hint;
-
-            hint.glyph_res_px = m_text_atlas->GetGlyphResolutionPx();
-
             return hint;
         }
 
@@ -261,8 +252,7 @@ namespace ks
 
         unique_ptr<std::vector<Line>>
         TextManager::GetGlyphs(std::u16string const &utf16text,
-                               Hint const &text_hint,
-                               uint const max_line_width_px)
+                               Hint const &text_hint)
         {
             if(text_hint.list_prio_fonts.empty() &&
                text_hint.list_fallback_fonts.empty())
@@ -284,8 +274,7 @@ namespace ks
             auto list_shaped_lines_ptr =
                     ShapeText(utf16text,
                               m_list_fonts,
-                              text_hint,
-                              max_line_width_px);
+                              text_hint);
 
             auto& list_shaped_lines = *list_shaped_lines_ptr;
 
@@ -299,7 +288,6 @@ namespace ks
                 ShapedLine const &shaped_line = list_shaped_lines[i];
                 Line &line = list_lines[i];
 
-                // TODO add start and end of each line
                 line.start = shaped_line.start;
                 line.end = shaped_line.end;
 

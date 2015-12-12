@@ -98,15 +98,11 @@ namespace ks
             void AddFont(std::string font_name,
                          unique_ptr<std::vector<u8>> file_data);
 
-            Hint CreateHint(std::string const &list_prio_fonts="",
-                            Hint::FontSearch font_search_hint=Hint::FontSearch::Fallback,
-                            Hint::Direction dirn_hint=Hint::Direction::Multiple,
-                            Hint::Script script_hint=Hint::Script::Multiple);
+            Hint CreateHint(std::string const &list_prio_fonts="");
 
             unique_ptr<std::vector<Line>>
             GetGlyphs(std::u16string const &utf16text,
-                      Hint const &text_hint,
-                      uint const max_line_width_px=std::numeric_limits<uint>::max());
+                      Hint const &text_hint);
 
             static std::u16string
             ConvertStringUTF8ToUTF16(std::string const &utf8text);

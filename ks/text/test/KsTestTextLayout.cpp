@@ -202,12 +202,7 @@ namespace test
                             font_name,
                             font_path+font_name);
 
-                m_text_hint =
-                        m_text_manager->CreateHint(
-                            font_name,
-                            text::Hint::FontSearch::Fallback,
-                            text::Hint::Direction::Multiple,
-                            text::Hint::Script::Multiple);
+                m_text_hint = m_text_manager->CreateHint(font_name);
 
 
                 std::string s;
@@ -245,11 +240,12 @@ namespace test
                 s = u8"This text shows multiple lines that break "
                       "automatically when a maximum line width is specified";
 
+                m_text_hint.max_line_width_px = width_px;
+
                 list_lines_ptr =
                         m_text_manager->GetGlyphs(
                             text::TextManager::ConvertStringUTF8ToUTF16(s),
-                            m_text_hint,
-                            width_px);
+                            m_text_hint);
 
                 createTextRenderData(*list_lines_ptr,glm::u8vec4{194,247,250,255});
                 m_baseline_y += spacing;
@@ -285,12 +281,9 @@ namespace test
                 fallback_list += ",";
                 fallback_list += font_name_d;
 
-                m_text_hint =
-                        m_text_manager->CreateHint(
-                            fallback_list,
-                            text::Hint::FontSearch::Fallback,
-                            text::Hint::Direction::Multiple,
-                            text::Hint::Script::Multiple);
+                m_text_hint = m_text_manager->CreateHint(fallback_list);
+                m_text_hint.script = text::Hint::Script::Multiple;
+                m_text_hint.max_line_width_px = width_px;
 
                 s = u8"This text shows font fallback (FiraSans then NotoSans-Devanagari) "
                     "\u0905\u0928\u0941\u091a\u094d\u091b\u0947\u0926 \u0031 \u2014 "
@@ -313,8 +306,7 @@ namespace test
                 list_lines_ptr =
                         m_text_manager->GetGlyphs(
                             text::TextManager::ConvertStringUTF8ToUTF16(s),
-                            m_text_hint,
-                            width_px);
+                            m_text_hint);
 
                 createTextRenderData(*list_lines_ptr,glm::u8vec4{223,194,250,255});
                 m_baseline_y += spacing;
@@ -331,12 +323,10 @@ namespace test
                 fallback_list += ",";
                 fallback_list += font_name_a;
 
-                m_text_hint =
-                        m_text_manager->CreateHint(
-                            fallback_list,
-                            text::Hint::FontSearch::Fallback,
-                            text::Hint::Direction::Multiple,
-                            text::Hint::Script::Multiple);
+                m_text_hint = m_text_manager->CreateHint(fallback_list);
+                m_text_hint.script = text::Hint::Script::Multiple;
+                m_text_hint.direction = text::Hint::Direction::Multiple;
+                m_text_hint.max_line_width_px = width_px;
 
                 s = u8"This text shows bidirectional support by mixing Arabic "
                     "(\u0627\u0644\u0639\u0631\u0628\u064a\u0629) and English. "
@@ -350,12 +340,23 @@ namespace test
                 list_lines_ptr =
                         m_text_manager->GetGlyphs(
                             text::TextManager::ConvertStringUTF8ToUTF16(s),
-                            m_text_hint,
-                            width_px);
+                            m_text_hint);
 
                 createTextRenderData(*list_lines_ptr,glm::u8vec4{248,180,180,255});
                 m_baseline_y += spacing;
 
+
+                // Elided text
+                m_text_hint.elide = true;
+
+                s = u8"This text shows a single line being elided when it is too long";
+
+                list_lines_ptr =
+                        m_text_manager->GetGlyphs(
+                            text::TextManager::ConvertStringUTF8ToUTF16(s),
+                            m_text_hint);
+
+                createTextRenderData(*list_lines_ptr,glm::u8vec4{160,210,250,255});
 
 
                 m_setup = true;

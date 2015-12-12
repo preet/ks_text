@@ -54,7 +54,13 @@ namespace ks
             Direction direction{Direction::LeftToRight};
             Script script{Script::Single};
 
-            uint glyph_res_px;
+            // The width at which line breaking (or eliding) occurs
+            uint max_line_width_px{std::numeric_limits<uint>::max()};
+
+            // Sets whether or not text will be elided. If true,
+            // text will be truncated before the line width limit
+            // is reached and appended with '...' at the end
+            bool elide{false};
         };
 
         // =========================================================== //

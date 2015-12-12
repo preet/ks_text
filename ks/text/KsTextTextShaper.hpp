@@ -61,11 +61,6 @@ namespace ks
             uint start;
             uint end;
 
-            // This is the vertical spacing between this line
-            // and the next, determined by getting the max line
-            // height of all the font faces used in this line
-            uint spacing;
-
             // These are in visual order
             std::vector<GlyphInfo> list_glyph_info;
             std::vector<GlyphOffset> list_glyph_offsets;
@@ -88,8 +83,7 @@ namespace ks
         unique_ptr<std::vector<ShapedLine>>
         ShapeText(std::u16string const &utf16text,
                   std::vector<unique_ptr<Font>> const &list_fonts,
-                  Hint const &text_hint,
-                  uint const max_line_width_px=std::numeric_limits<uint>::max());
+                  Hint const &text_hint);
 
     }
 }

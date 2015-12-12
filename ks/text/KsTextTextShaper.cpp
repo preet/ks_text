@@ -241,6 +241,10 @@ namespace ks
                         sint codepoint_sz = curr_index-prev_index;
                         prev_index = curr_index;
 
+                        // Need this to increment
+                        u32 const codepoint = utf16_cp_it.next32PostInc();
+                        (void)codepoint;
+
                         list_glyph_fonts.insert(
                                     list_glyph_fonts.end(),
                                     codepoint_sz,
@@ -684,17 +688,28 @@ namespace ks
 
                         // (the cluster is an offset into the buffer)
 
-                        glyph_info.zero_width =
-                                (utf16buff[hb_glyph_info.cluster] >= 9 &&
-                                 utf16buff[hb_glyph_info.cluster] <= 13);
+                        GlyphOffset glyph_offset;
+
+                        if(utf16buff[hb_glyph_info.cluster] >= 9 &&
+                           utf16buff[hb_glyph_info.cluster] <= 13)
+                        {
+                           glyph_info.zero_width = true;
+                           glyph_offset.advance_x = 0;
+                           glyph_offset.advance_y = hb_glyph_pos.y_advance/64;
+                           glyph_offset.offset_x  = 0;
+                           glyph_offset.offset_y  = hb_glyph_pos.y_offset/64;
+
+                        }
+                        else
+                        {
+                            glyph_info.zero_width = false;
+                            glyph_offset.advance_x = hb_glyph_pos.x_advance/64;
+                            glyph_offset.advance_y = hb_glyph_pos.y_advance/64;
+                            glyph_offset.offset_x  = hb_glyph_pos.x_offset/64;
+                            glyph_offset.offset_y  = hb_glyph_pos.y_offset/64;
+                        }
 
                         line.list_glyph_info.push_back(glyph_info);
-
-                        GlyphOffset glyph_offset;
-                        glyph_offset.advance_x = hb_glyph_pos.x_advance/64;
-                        glyph_offset.advance_y = hb_glyph_pos.y_advance/64;
-                        glyph_offset.offset_x  = hb_glyph_pos.x_offset/64;
-                        glyph_offset.offset_y  = hb_glyph_pos.y_offset/64;
                         line.list_glyph_offsets.push_back(glyph_offset);
                     }
                 }
@@ -796,8 +811,7 @@ namespace ks
         unique_ptr<std::vector<ShapedLine>>
         ShapeText(std::u16string const &utf16text,
                   std::vector<unique_ptr<Font>> const &list_fonts,
-                  Hint const &text_hint,
-                  uint const max_line_width_px)
+                  Hint const &text_hint)
         {
             icu::UnicodeString icu_string(
                         true,
@@ -810,21 +824,22 @@ namespace ks
             para.num_codepoints = para.utf16text.countChar32();
             para.list_lines = make_unique<std::vector<ShapedLine>>();
 
-            if(text_hint.direction != Hint::Direction::Multiple &&
-               text_hint.script == Hint::Script::Single)
-            {
+//            if(text_hint.direction != Hint::Direction::Multiple &&
+//               text_hint.script == Hint::Script::Single)
+//            {
                 // TODO: Short cut
                 // hb_buffer_set_direction
                 // hb_buffer_guess_segment_properties (hb_buffer);
-            }
-            else
-            {
+//            }
+//            else
+//            {
                 ItemizeDirection(para,HB_DIRECTION_INVALID);
                 ItemizeScript(para);
-            }
+//            }
 
             ItemizeFont(list_fonts,text_hint,para);
             MergeRuns(para);
+
 
             // Add the initial line of text containing all
             // of the text to the paragraph
@@ -835,63 +850,172 @@ namespace ks
             // Shape the first line
             ShapeLine(list_fonts,text_hint,para,0);
 
-            // Find all line breaks in the text
-            FindLineBreaks(para);
-
-            // Get the advances for each cluster in the text
-            std::vector<s32> list_cluster_adv(para.num_codeunits,0);
-
+            if(text_hint.elide)
             {
-                std::vector<GlyphInfo> const &ls_glyph_info =
-                        para.list_lines->back().list_glyph_info;
-
-                std::vector<GlyphOffset> const &ls_glyph_offsets =
-                        para.list_lines->back().list_glyph_offsets;
-
-                for(size_t i=0; i < ls_glyph_info.size(); i++)
+                // Check if we can return early
+                if(text_hint.max_line_width_px ==
+                        std::numeric_limits<uint>::max())
                 {
-                    list_cluster_adv[ls_glyph_info[i].cluster] +=
-                            ls_glyph_offsets[i].advance_x;
+                    return std::move(para.list_lines);
                 }
-            }
 
-            // Continually split the text into lines until all
-            // lines are below the max_width (or breaking is
-            // no longer possible)
-            uint lk_break_cu=0;
-
-            for(uint i = 0; i < para.list_lines->size(); i++)
-            {
                 ShapedLine& line = para.list_lines->back();
+                uint combined_adv=0;
 
-                uint combined_adv = 0;
-
-                // For each codeunit in the line
-                for(uint cu = line.start; cu < line.end; cu++)
+                // For each glyph
+                for(uint i=0; i < line.list_glyph_info.size(); i++)
                 {
-                    // Check if we have to break (newline, etc)
-                    if(para.list_break_data[cu] == LINEBREAK_MUSTBREAK)
+                    combined_adv += line.list_glyph_offsets[i].advance_x;
+                    if(combined_adv >= text_hint.max_line_width_px)
                     {
-                        CreateNewLine(para,i,cu);
-                        ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-2);
-                        ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-1);
+                        // See how much space we need for the set
+                        // of elide characters '...'
+                        Hint elide_text_hint = text_hint;
+                        elide_text_hint.list_prio_fonts.clear();
+                        elide_text_hint.list_fallback_fonts.clear();
+                        elide_text_hint.list_prio_fonts.push_back(
+                                    line.list_glyph_info[i].font);
+
+                        elide_text_hint.font_search =
+                                Hint::FontSearch::Explicit;
+
+                        elide_text_hint.max_line_width_px =
+                                std::numeric_limits<uint>::max();
+
+                        elide_text_hint.elide = false;
+
+                        auto elide_list_lines_ptr =
+                                ShapeText(
+                                    ConvertStringUTF8ToUTF16("..."),
+                                    list_fonts,
+                                    elide_text_hint);
+
+                        uint elide_glyphs_adv=0;
+                        ShapedLine& elide_line = elide_list_lines_ptr->front();
+                        for(auto& elide_glyph : elide_line.list_glyph_offsets)
+                        {
+                            elide_glyphs_adv += elide_glyph.advance_x;
+                        }
+
+                        // Start removing glyphs until there's enough
+                        // space to add the '...'
+                        uint elide_space = elide_glyphs_adv; // times some k factor
+                        bool space_avail = false;
+
+                        for(sint j=i; j >= 0; j--)
+                        {
+                            combined_adv -= line.list_glyph_offsets[j].advance_x;
+                            if((text_hint.max_line_width_px - combined_adv) > elide_space)
+                            {
+                                space_avail = true;
+
+                                // Remove glyphs >= index j
+                                auto it_info_e0 = std::next(line.list_glyph_info.begin(),j);
+                                auto it_info_e1 = line.list_glyph_info.end();
+                                line.list_glyph_info.erase(it_info_e0,it_info_e1);
+
+                                auto it_offsets_e0 = std::next(line.list_glyph_offsets.begin(),j);
+                                auto it_offsets_e1 = line.list_glyph_offsets.end();
+                                line.list_glyph_offsets.erase(it_offsets_e0,it_offsets_e1);
+
+                                // Set new line ending
+                                line.end = line.list_glyph_info.back().cluster;
+
+                                break;
+                            }
+                        }
+
+                        if(!space_avail)
+                        {
+                            // Remove all glyphs as there isn't any space
+                            // to show anything
+                            line.start = 0;
+                            line.end = 0;
+
+                            line.list_glyph_info.clear();
+                            line.list_glyph_offsets.clear();
+                        }
+                        else
+                        {
+                            // Manually add the '...' glyphs
+                            line.list_glyph_info.insert(
+                                        line.list_glyph_info.end(),
+                                        elide_line.list_glyph_info.begin(),
+                                        elide_line.list_glyph_info.end());
+
+                            line.list_glyph_offsets.insert(
+                                        line.list_glyph_offsets.end(),
+                                        elide_line.list_glyph_offsets.begin(),
+                                        elide_line.list_glyph_offsets.end());
+                        }
+
                         break;
                     }
-                    else if(para.list_break_data[cu] == LINEBREAK_ALLOWBREAK)
+                }
+            }
+            else
+            {
+                // Find all line breaks in the text
+                FindLineBreaks(para);
+
+                // Map cluster advances to individual code units
+                // because we go through each utf16 index to check
+                // for line breaks (ie codeunits, not glyphs)
+                std::vector<s32> list_codeunit_adv(para.num_codeunits,0);
+
+                {
+                    std::vector<GlyphInfo> const &ls_glyph_info =
+                            para.list_lines->back().list_glyph_info;
+
+                    std::vector<GlyphOffset> const &ls_glyph_offsets =
+                            para.list_lines->back().list_glyph_offsets;
+
+                    for(size_t i=0; i < ls_glyph_info.size(); i++)
                     {
-                        lk_break_cu = cu;
+                        list_codeunit_adv[ls_glyph_info[i].cluster] +=
+                                ls_glyph_offsets[i].advance_x;
                     }
+                }
 
-                    combined_adv += list_cluster_adv[cu];
+                // Continually split the text into lines until all
+                // lines are below the max_width (or breaking is
+                // no longer possible)
 
-                    if(combined_adv > max_line_width_px)
+                uint lk_break_cu=0;
+
+                for(uint i = 0; i < para.list_lines->size(); i++)
+                {
+                    ShapedLine& line = para.list_lines->back();
+
+                    uint combined_adv = 0;
+
+                    // For each codeunit in the line
+                    for(uint cu = line.start; cu < line.end; cu++)
                     {
-                        if(lk_break_cu > line.start)
+                        // Check if we have to break (newline, etc)
+                        if(para.list_break_data[cu] == LINEBREAK_MUSTBREAK)
                         {
-                            CreateNewLine(para,i,lk_break_cu);
+                            CreateNewLine(para,i,cu);
                             ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-2);
                             ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-1);
                             break;
+                        }
+                        else if(para.list_break_data[cu] == LINEBREAK_ALLOWBREAK)
+                        {
+                            lk_break_cu = cu;
+                        }
+
+                        combined_adv += list_codeunit_adv[cu];
+
+                        if(combined_adv > text_hint.max_line_width_px)
+                        {
+                            if(lk_break_cu > line.start)
+                            {
+                                CreateNewLine(para,i,lk_break_cu);
+                                ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-2);
+                                ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-1);
+                                break;
+                            }
                         }
                     }
                 }
