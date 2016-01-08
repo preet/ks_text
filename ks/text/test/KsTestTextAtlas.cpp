@@ -330,9 +330,9 @@ namespace test
                 m_text_hint =
                         m_text_manager->CreateHint(
                             "FiraSans-Regular.ttf",
-                            text::TextHint::FontSearch::Fallback,
-                            text::TextHint::Direction::Multiple,
-                            text::TextHint::Script::Multiple);
+                            text::Hint::FontSearch::Fallback,
+                            text::Hint::Direction::Multiple,
+                            text::Hint::Script::Multiple);
 
                 std::vector<text::Glyph> list_glyphs;
                 std::vector<text::GlyphPosition> list_glyph_pos;
@@ -390,7 +390,7 @@ namespace test
         shared_ptr<Scene> m_scene;
 
         unique_ptr<text::TextManager> m_text_manager;
-        text::TextHint m_text_hint;
+        text::Hint m_text_hint;
 
         bool m_setup;
         Id m_draw_stage_id;

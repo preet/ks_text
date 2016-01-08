@@ -169,9 +169,9 @@ namespace ks
                     it != list_font_runs.end(); ++it)
                 {
                     std::string rundata = "[" +
-                            ks::to_string(it->start) + "," +
-                            ks::to_string(it->end) + "," +
-                            ks::to_string(it->font) + "], ";
+                            ks::ToString(it->start) + "," +
+                            ks::ToString(it->end) + "," +
+                            ks::ToString(it->font) + "], ";
                     output += rundata;
                 }
                 LOG.Info() << "FontRun:" << output;

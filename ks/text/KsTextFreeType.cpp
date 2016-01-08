@@ -21,9 +21,9 @@ namespace ks
         std::string GetFreeTypeError(FT_Error error)
         {
             std::string desc = "FreeType err:";
-            desc += ks::to_string(FT_ErrorDesc[error].code);
+            desc += ks::ToString(FT_ErrorDesc[error].code);
             desc += std::string(": ");
-            desc += ks::to_string(FT_ErrorDesc[error].message);
+            desc += ks::ToString(FT_ErrorDesc[error].message);
 
             return desc;
         }
