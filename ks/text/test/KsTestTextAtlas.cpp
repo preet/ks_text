@@ -136,13 +136,9 @@ namespace test
 
         void OnTextInput(std::string utf8str)
         {
-            std::vector<text::Glyph> list_glyphs;
-            std::vector<text::GlyphPosition> list_glyph_pos;
-
-            m_text_manager->GetGlyphs(utf8str,
-                                      m_text_hint,
-                                      list_glyphs,
-                                      list_glyph_pos);
+            m_text_manager->GetGlyphs(
+                        text::TextManager::ConvertStringUTF8ToUTF16(utf8str),
+                        m_text_hint);
         }
 
 
@@ -327,15 +323,10 @@ namespace test
                             "FiraSans-Regular.ttf",
                             "/home/preet/Dev/FiraSans-Regular.ttf");
 
-                m_text_hint =
-                        m_text_manager->CreateHint(
-                            "FiraSans-Regular.ttf",
-                            text::Hint::FontSearch::Fallback,
-                            text::Hint::Direction::Multiple,
-                            text::Hint::Script::Multiple);
-
-                std::vector<text::Glyph> list_glyphs;
-                std::vector<text::GlyphPosition> list_glyph_pos;
+                m_text_hint = m_text_manager->CreateHint("FiraSans-Regular.ttf");
+                m_text_hint.font_search = text::Hint::FontSearch::Fallback;
+                m_text_hint.direction = text::Hint::Direction::Multiple;
+                m_text_hint.script = text::Hint::Script::Multiple;
 
                 m_setup = true;
             }
