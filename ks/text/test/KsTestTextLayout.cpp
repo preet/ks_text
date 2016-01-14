@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2015 Preet Desai (preet.desai@gmail.com)
+   Copyright (C) 2015-2016 Preet Desai (preet.desai@gmail.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -97,7 +97,8 @@ namespace test
         {
             m_scene->signal_before_update.Connect(
                         this_updater,
-                        &Updater::onUpdate);
+                        &Updater::onUpdate,
+                        ks::ConnectionType::Direct);
 
             m_text_manager->signal_new_atlas->Connect(
                         this_updater,
@@ -604,40 +605,27 @@ int main(int argc, char* argv[])
     shared_ptr<gui::Application> app =
             make_object<gui::Application>();
 
-    // Create the render thread
-    shared_ptr<EventLoop> render_evl = make_shared<EventLoop>();
-
-    std::thread render_thread =
-            EventLoop::LaunchInThread(render_evl);
-
-    // Create the scene thread
-    shared_ptr<EventLoop> scene_evl = make_shared<EventLoop>();
-
-    std::thread scene_thread =
-            EventLoop::LaunchInThread(scene_evl);
-
-
     // Create window
     gui::Window::Attributes win_attribs;
     gui::Window::Properties win_props;
-    win_props.width = 600;
+    win_props.swap_interval = 1;
+    win_props.width = 800;
     win_props.height = 800;
 
     shared_ptr<gui::Window> window =
             app->CreateWindow(
-                render_evl,
+                app->GetEventLoop(),
                 win_attribs,
                 win_props);
 
     shared_ptr<test::Scene> scene =
             make_object<test::Scene>(
-                scene_evl,
-                window,
-                std::chrono::milliseconds(15));
+                app,
+                window);
 
     shared_ptr<test::Updater> test_updater =
             make_object<test::Updater>(
-                scene_evl,
+                app->GetEventLoop(),
                 scene);
 
     (void)test_updater;
@@ -645,12 +633,9 @@ int main(int argc, char* argv[])
     // Run!
     app->Run();
 
-    // Stop threads
-    EventLoop::RemoveFromThread(scene_evl,scene_thread,true);
-    EventLoop::RemoveFromThread(render_evl,render_thread,true);
-
     return 0;
 }
+
 
 // ============================================================= //
 // ============================================================= //
