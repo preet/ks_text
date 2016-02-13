@@ -375,7 +375,7 @@ namespace test
 
             atlas_data.texture_set->list_texture_desc.
                     emplace_back(
-                        make_unique<gl::Texture2D>(
+                        make_shared<gl::Texture2D>(
                             gl::Texture2D::Format::LUMINANCE8),
                         0);
 
@@ -389,7 +389,7 @@ namespace test
 
             atlas_data.uniform_set->list_uniforms.
                     push_back(
-                        make_unique<gl::Uniform<GLint>>(
+                        make_shared<gl::Uniform<GLint>>(
                             "u_s_tex0",0));
 
             atlas_data.uniform_set_id =

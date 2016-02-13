@@ -169,7 +169,7 @@ namespace test
                 Image<R8> empty_image(16,16,R8{100});
 
                 auto empty_texture =
-                        make_unique<gl::Texture2D>(
+                        make_shared<gl::Texture2D>(
                             gl::Texture2D::Format::LUMINANCE8);
 
                 empty_texture->UpdateTexture(
@@ -202,7 +202,7 @@ namespace test
                 // (uniform set)
                 atlas_data.uniform_set = make_shared<draw::UniformSet>();
                 atlas_data.uniform_set->list_uniforms.push_back(
-                            make_unique<gl::Uniform<GLint>>("u_s_tex0",0));
+                            make_shared<gl::Uniform<GLint>>("u_s_tex0",0));
 
                 atlas_data.uniform_set_id =
                         render_system->RegisterUniformSet(
