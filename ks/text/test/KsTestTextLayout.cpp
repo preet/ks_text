@@ -79,7 +79,9 @@ namespace test
             m_scene(scene),
             m_setup(false),
             m_draw_stage_id(0),
-            m_shader_id(0)
+            m_shader_id(0),
+            m_baseline_x(0),
+            m_baseline_y(0)
         {
             static_assert(
                         sizeof(Vertex)==28,
@@ -609,7 +611,7 @@ int main(int argc, char* argv[])
     gui::Window::Attributes win_attribs;
     gui::Window::Properties win_props;
     win_props.swap_interval = 1;
-    win_props.width = 800;
+    win_props.width = 600;
     win_props.height = 800;
 
     shared_ptr<gui::Window> window =
