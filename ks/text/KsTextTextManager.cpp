@@ -17,8 +17,6 @@
 
 #include <iostream>
 #include <fstream>
-#include <locale>
-#include <codecvt>
 
 #include <ks/text/KsTextTextManager.hpp>
 #include <ks/text/KsTextFreeType.hpp>
