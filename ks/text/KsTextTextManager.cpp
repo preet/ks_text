@@ -268,6 +268,12 @@ namespace ks
                     m_text_atlas->GetGlyphResolutionPx() +
                     (m_text_atlas->GetGlyphResolutionPx()/5);
 
+            sint const invalid_font_ascent =
+                    m_text_atlas->GetGlyphResolutionPx();
+
+            sint const invalid_font_descent = 0;
+
+
             // Shape with TextShaper
             auto list_shaped_lines_ptr =
                     ShapeText(utf16text,
@@ -346,17 +352,24 @@ namespace ks
                     line.y_min = std::min(line.y_min,glyph.y0);
                     line.y_max = std::max(line.y_max,glyph.y1);
 
+                    // update atlas list
+                    OrderedUniqueInsert<uint>(line.list_atlases,glyph.atlas);
+
                     // update unique font list
                     OrderedUniqueInsert<uint>(list_unq_fonts,glyph_img.font);
                 }
 
                 // Calculate the line spacing
                 line.spacing = 0;
+                line.ascent = 0;
+                line.descent = std::numeric_limits<sint>::max();
                 for(auto font : list_unq_fonts)
                 {
                     // Fix the invalid font height
                     if(font == 0)
                     {
+                        line.ascent = std::max(line.ascent,invalid_font_ascent);
+                        line.descent = std::min(line.descent,invalid_font_descent);
                         line.spacing = std::max(line.spacing,invalid_font_line_height);
                     }
                     else
@@ -364,7 +377,12 @@ namespace ks
                         auto const &ft_size_metrics =
                                 m_list_fonts[font]->ft_face->size->metrics;
 
+                        sint font_ascent = ft_size_metrics.ascender/64;
+                        sint font_descent = ft_size_metrics.descender/64;
                         uint font_line_height = ft_size_metrics.height/64;
+
+                        line.ascent = std::max(line.ascent,font_ascent);
+                        line.descent = std::min(line.descent,font_descent);
                         line.spacing = std::max(line.spacing,font_line_height);
                     }
                 }

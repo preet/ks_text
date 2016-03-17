@@ -92,17 +92,29 @@ namespace ks
             uint start;
             uint end;
 
+            // Bounding box
+            // * Bounding box for all glyphs in this line
             sint x_min;
             sint x_max;
-            sint y_min; // equivalent to descent
-            sint y_max; // equivalent to ascent
+            sint y_min;
+            sint y_max;
 
-            // This is the vertical spacing between this line
-            // and the next, determined by getting the max line
-            // height of all the font faces used in this line.
-            // Its set by the font designer and not necessarily
-            // equal to y_max-y_min
+            // Font Metrics
+            // * Font metric values are the absolute maximum
+            //   value for each font used in this line
+
+            // * Distance above the baseline to enclose all glyphs
+            sint ascent;
+
+            // * Distance below the baseline to enclose all glyphs
+            //   (generally negative)
+            sint descent;
+
+            // * Vertical spacing between baselines
             uint spacing;
+
+            // * The list of indices for each atlas
+            std::vector<uint> list_atlases;
 
             std::vector<Glyph> list_glyphs;
         };
