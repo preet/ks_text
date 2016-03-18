@@ -776,6 +776,18 @@ namespace ks
                             }
                         }
                     }
+                    else
+                    {
+                        auto const utf16char = utf16text_data[num_cu-1];
+
+                        // LF: 10, CR: 13
+                        bool is_newline = (utf16char == 10 || utf16char == 13);
+
+                        if(is_newline == false)
+                        {
+                            para.list_break_data[num_cu-1] = LINEBREAK_NOBREAK;
+                        }
+                    }
                 }
             }
 
@@ -1018,6 +1030,23 @@ namespace ks
                             }
                         }
                     }
+                }
+            }
+
+            if(para.list_dirn_runs[0].dirn == HB_DIRECTION_LTR)
+            {
+                auto& list_lines = *para.list_lines;
+                for(auto& line : list_lines)
+                {
+                    line.rtl = false;
+                }
+            }
+            else
+            {
+                auto& list_lines = *para.list_lines;
+                for(auto& line : list_lines)
+                {
+                    line.rtl = true;
                 }
             }
 
