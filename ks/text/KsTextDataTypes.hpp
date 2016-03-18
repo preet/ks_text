@@ -117,6 +117,10 @@ namespace ks
             std::vector<uint> list_atlases;
 
             std::vector<Glyph> list_glyphs;
+
+            // * Overall direction for the paragraph this
+            //   line belongs to (rtl stands for right-to-left)
+            bool rtl;
         };
 
         // =========================================================== //

@@ -61,7 +61,7 @@ namespace ks
         class HintInvalid : public ks::Exception
         {
         public:
-            HintInvalid();
+            HintInvalid(std::string);
             ~HintInvalid() = default;
         };
 

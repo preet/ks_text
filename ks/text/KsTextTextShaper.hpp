@@ -64,6 +64,10 @@ namespace ks
             // These are in visual order
             std::vector<GlyphInfo> list_glyph_info;
             std::vector<GlyphOffset> list_glyph_offsets;
+
+            // Direction set based on the first Direction Run
+            // of the entire string passed to ShapeText
+            bool rtl;
         };
 
         // * Helper function that converts a UTF8 string to UTF16

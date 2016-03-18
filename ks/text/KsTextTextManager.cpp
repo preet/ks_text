@@ -75,11 +75,11 @@ namespace ks
         {}
 
         NoFontsAvailable::NoFontsAvailable() :
-            ks::Exception(ks::Exception::ErrorLevel::ERROR,"")
+            ks::Exception(ks::Exception::ErrorLevel::ERROR,"No fonts available")
         {}
 
-        HintInvalid::HintInvalid() :
-            ks::Exception(ks::Exception::ErrorLevel::ERROR,"")
+        HintInvalid::HintInvalid(std::string desc) :
+            ks::Exception(ks::Exception::ErrorLevel::ERROR,std::move(desc))
         {}
 
         // =========================================================== //
@@ -255,7 +255,7 @@ namespace ks
             if(text_hint.list_prio_fonts.empty() &&
                text_hint.list_fallback_fonts.empty())
             {
-                throw HintInvalid();
+                throw HintInvalid("No fonts specified in Hint");
             }
 
             auto list_lines_ptr = make_unique<std::vector<Line>>();
@@ -292,6 +292,7 @@ namespace ks
                 ShapedLine const &shaped_line = list_shaped_lines[i];
                 Line &line = list_lines[i];
 
+                line.rtl = shaped_line.rtl;
                 line.start = shaped_line.start;
                 line.end = shaped_line.end;
 
@@ -306,6 +307,33 @@ namespace ks
                             m_list_fonts,
                             shaped_line.list_glyph_info,
                             list_glyph_imgs);
+
+
+                if(glyph_count == 0)
+                {
+                    line.start = 0;
+                    line.end = 0;
+                    line.x_min = 0;
+                    line.x_max = 0;
+                    line.y_min = 0;
+                    line.y_max = 0;
+                    line.rtl = false;
+
+                    if(i==0)
+                    {
+                        line.ascent = invalid_font_ascent;
+                        line.descent = invalid_font_descent;
+                        line.spacing = invalid_font_line_height;
+                    }
+                    else
+                    {
+                        line.ascent = list_lines[i-1].ascent;
+                        line.descent = list_lines[i-1].descent;
+                        line.spacing = list_lines[i-1].spacing;
+                    }
+
+                    continue;
+                }
 
                 // Set glyph positions on a (0,0) baseline.
                 // (x0,y0) for a glyph is the bottom-left
@@ -346,20 +374,23 @@ namespace ks
 
                     pen_x += glyph_offset.advance_x;
 
-                    // update min,max x,y
-                    line.x_min = std::min(line.x_min,glyph.x0);
-                    line.x_max = std::max(line.x_max,glyph.x1);
-                    line.y_min = std::min(line.y_min,glyph.y0);
-                    line.y_max = std::max(line.y_max,glyph.y1);
-
                     // update atlas list
                     OrderedUniqueInsert<uint>(line.list_atlases,glyph.atlas);
 
                     // update unique font list
                     OrderedUniqueInsert<uint>(list_unq_fonts,glyph_img.font);
+
+                    if(glyph_img.width != 0)
+                    {
+                        // update min,max x,y
+                        line.x_min = std::min(line.x_min,glyph.x0);
+                        line.x_max = std::max(line.x_max,glyph.x1);
+                        line.y_min = std::min(line.y_min,glyph.y0);
+                        line.y_max = std::max(line.y_max,glyph.y1);
+                    }
                 }
 
-                // Calculate the line spacing
+                // Calculate font metrics from the line
                 line.spacing = 0;
                 line.ascent = 0;
                 line.descent = std::numeric_limits<sint>::max();
