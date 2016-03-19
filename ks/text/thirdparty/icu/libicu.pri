@@ -2,7 +2,6 @@
 # icu build for doing bidi and script itemization
 # TODO update to 5.4
 
-
 # icu doesn't use "#include <...>" instead
 # of "#include "..."" to differentiate
 # between local and system headers, so some
@@ -10,7 +9,10 @@
 # headers instead of local ones
 
 # try and fix:
+PATH_ICU_COMMON = $${PWD}/common
 QMAKE_CXXFLAGS += -iquote$${PATH_ICU_COMMON}
+
+message("PATH ICU COMMON $${PATH_ICU_COMMON}")
 
 # defines
 # based on:
@@ -64,7 +66,6 @@ DEFINES += "UCONFIG_NO_FILE_IO=1"
 #////////////////////////////////////////////////////////////////////
 
 # common
-PATH_ICU_COMMON = $${PWD}/common
 INCLUDEPATH += $${PATH_ICU_COMMON}
 
 # platform
