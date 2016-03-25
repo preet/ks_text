@@ -12,8 +12,6 @@
 PATH_ICU_COMMON = $${PWD}/common
 QMAKE_CXXFLAGS += -iquote$${PATH_ICU_COMMON}
 
-message("PATH ICU COMMON $${PATH_ICU_COMMON}")
-
 # defines
 # based on:
 # icu/readme.html#HowToBuild
