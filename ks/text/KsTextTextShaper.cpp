@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2015 Preet Desai (preet.desai@gmail.com)
+   Copyright (C) 2015-2016 Preet Desai (preet.desai@gmail.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -797,7 +797,7 @@ namespace ks
                                uint line_index,
                                uint break_index)
             {
-                // Break and reshape
+                // Break
                 ShapedLine& line = (*(para.list_lines))[line_index];
 
                 ShapedLine line_next;
@@ -805,6 +805,69 @@ namespace ks
                 line_next.end = line.end;
                 line.end = line_next.start;
                 para.list_lines->push_back(line_next);
+            }
+
+            void SplitIntoNewLine(ParagraphDesc& para,
+                                  uint line_index,
+                                  uint break_index)
+            {
+                // Create a new line
+                para.list_lines->emplace_back();
+
+                ShapedLine& old_line = (*(para.list_lines))[line_index];
+                ShapedLine& new_line = para.list_lines->back();
+                new_line.start = break_index+1;
+                new_line.end = old_line.end;
+                old_line.end = new_line.start;
+
+                // Estimate number of glyphs in next line
+                // TODO verify
+                uint const next_line_glyph_count =
+                        new_line.end-new_line.start;
+
+                std::vector<sint> list_rem_glyphs;
+                list_rem_glyphs.reserve(next_line_glyph_count);
+
+                new_line.list_glyph_info.reserve(
+                            next_line_glyph_count);
+
+                new_line.list_glyph_offsets.reserve(
+                            next_line_glyph_count);
+
+                // Move all glyphs that belong in the next line
+                for(uint i=0; i < old_line.list_glyph_info.size(); i++)
+                {
+                    if(old_line.list_glyph_info[i].cluster > break_index)
+                    {
+                        new_line.list_glyph_info.push_back(
+                                    old_line.list_glyph_info[i]);
+
+                        new_line.list_glyph_offsets.push_back(
+                                    old_line.list_glyph_offsets[i]);
+
+                        list_rem_glyphs.push_back(i);
+                    }
+                }
+
+                if(list_rem_glyphs.size()==0)
+                {
+                    return;
+                }
+
+                // Remove glyphs from old_line
+                auto old_glyph_info_begin = old_line.list_glyph_info.begin();
+                auto old_glyph_offsets_begin = old_line.list_glyph_offsets.begin();
+
+                for(sint i=list_rem_glyphs.size()-1; i >=0; i--)
+                {
+                    auto idx = list_rem_glyphs[i];
+
+                    old_line.list_glyph_info.erase(
+                                std::next(old_glyph_info_begin,idx));
+
+                    old_line.list_glyph_offsets.erase(
+                                std::next(old_glyph_offsets_begin,idx));
+                }
             }
         }
 
@@ -851,7 +914,6 @@ namespace ks
 
             ItemizeFont(list_fonts,text_hint,para);
             MergeRuns(para);
-
 
             // Add the initial line of text containing all
             // of the text to the paragraph
@@ -967,6 +1029,9 @@ namespace ks
             }
             else
             {
+                // Breaking strategy from:
+                // https://lists.freedesktop.org/archives/harfbuzz/2014-February/004136.html
+
                 // Find all line breaks in the text
                 FindLineBreaks(para);
 
@@ -1007,9 +1072,8 @@ namespace ks
                         // Check if we have to break (newline, etc)
                         if(para.list_break_data[cu] == LINEBREAK_MUSTBREAK)
                         {
-                            CreateNewLine(para,i,cu);
+                            SplitIntoNewLine(para,i,cu);
                             ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-2);
-                            ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-1);
                             break;
                         }
                         else if(para.list_break_data[cu] == LINEBREAK_ALLOWBREAK)
@@ -1023,9 +1087,8 @@ namespace ks
                         {
                             if(lk_break_cu > line.start)
                             {
-                                CreateNewLine(para,i,lk_break_cu);
+                                SplitIntoNewLine(para,i,lk_break_cu);
                                 ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-2);
-                                ShapeLine(list_fonts,text_hint,para,para.list_lines->size()-1);
                                 break;
                             }
                         }
