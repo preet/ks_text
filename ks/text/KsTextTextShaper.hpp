@@ -79,6 +79,9 @@ namespace ks
         //   way everything will match up
         std::u16string ConvertStringUTF8ToUTF16(std::string const &utf8text);
 
+        // * Helper function that converts a UTF32 string to UTF8
+        std::string ConvertStringUTF32ToUTF8(std::u32string const &utf32text);
+
         // ShapeText
         // * This function shapes @utf16text and returns the
         //   result in a list of ShapedLines that can be used

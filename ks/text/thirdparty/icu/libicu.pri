@@ -88,6 +88,10 @@ SOURCES += \
 SOURCES += \
     $${PATH_ICU_COMMON}/appendable.cpp
 
+# bytestream
+SOURCES += \
+    $${PATH_ICU_COMMON}/bytestream.cpp
+
 # ustrtrns
 SOURCES += \
     $${PATH_ICU_COMMON}/ustrtrns.cpp

@@ -427,6 +427,11 @@ namespace ks
             return text::ConvertStringUTF8ToUTF16(utf8text);
         }
 
+        std::string TextManager::ConvertStringUTF32ToUTF8(std::u32string const &utf32text)
+        {
+            return text::ConvertStringUTF32ToUTF8(utf32text);
+        }
+
         void TextManager::cleanUpFonts()
         {
             FT_Error error;

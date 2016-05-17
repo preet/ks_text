@@ -107,6 +107,8 @@ namespace ks
             static std::u16string
             ConvertStringUTF8ToUTF16(std::string const &utf8text);
 
+            static std::string
+            ConvertStringUTF32ToUTF8(std::u32string const &utf32text);
 
             // uint: atlas index
             Signal<uint,uint> * const signal_new_atlas;

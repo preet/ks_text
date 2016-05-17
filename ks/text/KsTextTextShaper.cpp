@@ -881,6 +881,21 @@ namespace ks
                         icu_string.length());
         }
 
+        std::string ConvertStringUTF32ToUTF8(std::u32string const &utf32text)
+        {
+            // This cast should be okay because the max unicode
+            // code point is 1,114,112, far below max<int32_t>
+            UChar32 const * data = reinterpret_cast<UChar32 const *>(utf32text.data());
+
+            icu::UnicodeString icu_string =
+                    icu::UnicodeString::fromUTF32(data,utf32text.size());
+
+            std::string utf8text;
+            icu_string.toUTF8String(utf8text);
+
+            return utf8text;
+        }
+
         // =========================================================== //
 
         unique_ptr<std::vector<ShapedLine>>
