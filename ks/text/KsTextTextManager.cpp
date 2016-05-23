@@ -371,6 +371,7 @@ namespace ks
                     glyph.x1 = glyph.x0 + glyph_img.width;
                     glyph.y1 = glyph_offset.offset_y + glyph_img.bearing_y;
                     glyph.y0 = glyph.y1 - glyph_img.height;
+                    glyph.rtl = shaped_line.list_glyph_info[j].rtl;
 
                     pen_x += glyph_offset.advance_x;
 
@@ -380,14 +381,24 @@ namespace ks
                     // update unique font list
                     OrderedUniqueInsert<uint>(list_unq_fonts,glyph_img.font);
 
-                    if(glyph_img.width != 0)
+                    // adjust the glyph width for special characters like space
+                    GlyphInfo const &glyph_info =
+                            shaped_line.list_glyph_info[j];
+
+                    if(glyph_img.width==0 && glyph_info.zero_width==false)
                     {
-                        // update min,max x,y
-                        line.x_min = std::min(line.x_min,glyph.x0);
-                        line.x_max = std::max(line.x_max,glyph.x1);
-                        line.y_min = std::min(line.y_min,glyph.y0);
-                        line.y_max = std::max(line.y_max,glyph.y1);
+                        glyph.x1 = glyph.x0 + glyph_offset.advance_x;
+                        if(glyph.x0 > glyph.x1)
+                        {
+                            std::swap(glyph.x0,glyph.x1);
+                        }
                     }
+
+                    // update min,max x,y
+                    line.y_min = std::min(line.y_min,glyph.y0);
+                    line.y_max = std::max(line.y_max,glyph.y1);
+                    line.x_min = std::min(line.x_min,glyph.x0);
+                    line.x_max = std::max(line.x_max,glyph.x1);
                 }
 
                 // Calculate font metrics from the line
@@ -425,6 +436,11 @@ namespace ks
         std::u16string TextManager::ConvertStringUTF8ToUTF16(std::string const &utf8text)
         {
             return text::ConvertStringUTF8ToUTF16(utf8text);
+        }
+
+        std::string TextManager::ConvertStringUTF16ToUTF8(std::u16string const &utf16text)
+        {
+            return text::ConvertStringUTF16ToUTF8(utf16text);
         }
 
         std::string TextManager::ConvertStringUTF32ToUTF8(std::u32string const &utf32text)

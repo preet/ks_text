@@ -623,6 +623,12 @@ namespace ks
 
                 auto const utf16buff = para.utf16text.getBuffer();
 
+                // direction mapper
+                std::array<u8,10> lkup_hb_direction{
+                    0,0,0,0,0,0,0,0,0,0
+                };
+                lkup_hb_direction[HB_DIRECTION_RTL]=1;
+
                 // for each text run
                 std::vector<TextRun>::const_iterator run_it;
                 for(run_it  = para.list_runs.begin();
@@ -678,6 +684,8 @@ namespace ks
                         glyph_info.index = hb_glyph_info.codepoint;
                         glyph_info.cluster = hb_glyph_info.cluster;
                         glyph_info.font = run_it->font;
+                        glyph_info.rtl = lkup_hb_direction[run_it->dirn];
+
 
                         // We special case whitespace line breaking characters
                         // (0x09 to 0x0D), which include CR, LF, FF, h and v tab
@@ -879,6 +887,16 @@ namespace ks
             return std::u16string(
                         reinterpret_cast<const char16_t*>(icu_string.getBuffer()),
                         icu_string.length());
+        }
+
+        std::string ConvertStringUTF16ToUTF8(std::u16string const &utf16text)
+        {
+            UChar const * data = reinterpret_cast<UChar const *>(utf16text.data());
+            icu::UnicodeString icu_string = icu::UnicodeString(data,utf16text.size());
+            std::string utf8text;
+            icu_string.toUTF8String(utf8text);
+
+            return utf8text;
         }
 
         std::string ConvertStringUTF32ToUTF8(std::u32string const &utf32text)

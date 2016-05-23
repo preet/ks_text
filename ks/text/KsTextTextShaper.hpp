@@ -79,6 +79,8 @@ namespace ks
         //   way everything will match up
         std::u16string ConvertStringUTF8ToUTF16(std::string const &utf8text);
 
+        std::string ConvertStringUTF16ToUTF8(std::u16string const &utf16text);
+
         // * Helper function that converts a UTF32 string to UTF8
         std::string ConvertStringUTF32ToUTF8(std::u32string const &utf32text);
 

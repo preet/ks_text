@@ -68,7 +68,7 @@ namespace ks
         struct Glyph
         {
             uint cluster;
-            uint atlas;
+            u16  atlas;
 
             // texture coords (pixels) for the top
             // left corner of the glyph tex in its atlas
@@ -83,6 +83,8 @@ namespace ks
             s32 y0;
             s32 x1; // x1 is to the right of x0
             s32 y1; // y1 is above y0
+
+            bool rtl; // indicates this glyph is part of an rtl segment
         };
 
         // =========================================================== //
