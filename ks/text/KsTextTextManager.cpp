@@ -392,6 +392,9 @@ namespace ks
                         {
                             std::swap(glyph.x0,glyph.x1);
                         }
+
+                        glyph.sdf_x = 0;
+                        glyph.sdf_y = 0;
                     }
 
                     // update min,max x,y
